@@ -1,3 +1,4 @@
+""
 """
 visual_mapper_resizable.py
 Excel‑driven list  ⇆  API‑driven tree  +  mapping persistence
@@ -34,8 +35,8 @@ class MapperGUI(tk.Tk):
         self.source_items: list[str] = []
         self.mappings: list[tuple[str, str]] = []
 
-        # New: pilots list (membership number, name)
-        self.pilots: list[tuple[str, str]] = []
+        # New: pilots list 
+        self.pilots: list[tuple[str, str, str]]  # (name, membership_number, id)
 
         self.target_tree_dict = self._load_target_tree()
 
@@ -64,12 +65,12 @@ class MapperGUI(tk.Tk):
         ttk.Label(hdr, text="Source (column C)").pack(side="left")
         ttk.Button(hdr, text="Load Excel…", command=self._load_excel).pack(side="right")
 
-        # listbox + scrollbar
-        self.lb_source = tk.Listbox(src_frame, exportselection=False, activestyle="none")
+        # source pane
+        self.tree_source = ttk.Treeview(src_frame, show="tree", selectmode="browse")
         yscroll_src = ttk.Scrollbar(src_frame, orient="vertical",
-                                    command=self.lb_source.yview)
-        self.lb_source.configure(yscrollcommand=yscroll_src.set)
-        self.lb_source.grid(row=1, column=0, sticky="nsew")
+                                    command=self.tree_source.yview)
+        self.tree_source.configure(yscrollcommand=yscroll_src.set)
+        self.tree_source.grid(row=1, column=0, sticky="nsew")
         yscroll_src.grid(row=1, column=1, sticky="ns")
 
         paned.add(src_frame, weight=1)      # let user drag divider
@@ -142,12 +143,18 @@ class MapperGUI(tk.Tk):
         # Make bottom frame row 5 (pilots) grow as well
         bottom.rowconfigure(5, weight=1)
 
+        # delete mapping button
+        ttk.Button(btnrow, text="Delete selected mapping", command=self._delete_selected_mapping).pack(side="left", padx=4)
+
+
     # ---------- dynamic tree loaders --------------------------------------
 
     def _load_target_tree(self) -> dict:
         return {
             "Root": {
-                "Account":      self._load_account_leaves(),
+                "Account": {
+                    "data": self._load_account_leaves()
+                },
                 "Competencies": self._load_competencies_subtree(),
             }
         }
@@ -218,6 +225,9 @@ class MapperGUI(tk.Tk):
         else:
             self.tree.insert(parent_id, "end", text=str(subtree))
 
+
+
+
     # ---------- Load Excel -------------------------------
 
     def _load_excel(self):
@@ -235,55 +245,74 @@ class MapperGUI(tk.Tk):
         if not fpath:
             return
 
+        df = pd.read_excel(fpath, sheet_name=0, engine="openpyxl", header=4)
+        if df.shape[1] < 3:
+            raise ValueError("First sheet has fewer than 3 columns.")
+        
+        membership_col = 'ACCOUNT'  
+        name_col = 'NAME'
+
+        # Extract unique base items from column C
+        base_items = sorted(
+            {str(v).strip() for v in df.iloc[:, 2].dropna() if str(v).strip()}
+        )
+        if not base_items:
+            raise ValueError("No non‑blank values in column C.")
+
+        # Expand each base item to include /date from and /date to children
+        expanded = []
+        for item in base_items:
+            expanded.append(item)  # base (non-mappable)
+            expanded.append(f"{item} / date from")
+            expanded.append(f"{item} / date to")
+        self.source_items = expanded
+        self._refresh_source_tree()
+
+        # extract unique pilots
+        df_unique_pilots = df.drop_duplicates(subset=membership_col, keep='first')
+        
+        account_map = {}
+        # Fetch account data from server
+        url = f"{self.config['server'].rstrip('/')}/api/accounts.json"
+        headers = {"X-API-KEY": self.config["api_key"]}
         try:
-            df = pd.read_excel(fpath, sheet_name=0, engine="openpyxl")
-            if df.shape[1] < 3:
-                raise ValueError("First sheet has fewer than 3 columns.")
-
-            # Extract unique source items from column C (index 2)
-            uniques = sorted(
-                {str(v).strip() for v in df.iloc[:, 2].dropna() if str(v).strip()}
-            )
-            if not uniques:
-                raise ValueError("No non‑blank values in column C.")
-            self.source_items = uniques
-            self._refresh_source_listbox()
-
-            # --- New code: extract unique pilots (membership#, name) from columns A & B
-            pilots_raw = df.iloc[:, [0, 1]].dropna()
-            pilots_set = set()
-            pilots_unique = []
-            for idx, row in pilots_raw.iterrows():
-                mem_num = str(row.iloc[0]).strip()
-                name = str(row.iloc[1]).strip()
-                if mem_num and name:
-                    pair = (mem_num, name)
-                    if pair not in pilots_set:
-                        pilots_set.add(pair)
-                        pilots_unique.append(pair)
-            self.pilots = pilots_unique
-            self._refresh_pilots_listbox()
-
-            # Clear mappings on new load
-            self.mappings.clear()
-            self._refresh_mapping_listbox()
-
-            messagebox.showinfo(
-                "Excel loaded",
-                f"{len(uniques)} unique source items and {len(self.pilots)} pilots loaded from {Path(fpath).name}"
-            )
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            accounts = response.json()
+            account_map = {int(acc['lid_nummer']): acc['id'] for acc in accounts}
         except Exception as e:
-            messagebox.showerror("Excel error", str(e))
+            messagebox.showerror("Error", f"Failed to fetch accounts: {e}")
+            return
 
-    def _refresh_source_listbox(self):
-        self.lb_source.delete(0, tk.END)
+        self.pilots = []
+
+        for _, row in df_unique_pilots.iterrows():
+            membership = row[membership_col]
+            name = row[name_col]
+            pilot_id = account_map.get(membership, None)  # None if no match
+            self.pilots.append((name, membership, pilot_id))
+
+        self._refresh_pilots_listbox()
+
+        # Clear mappings on new load
+        self.mappings.clear()
+        self._refresh_mapping_listbox()
+
+    def _refresh_source_tree(self):
+        self.tree_source.delete(*self.tree_source.get_children())
+        parents = {}
         for item in self.source_items:
-            self.lb_source.insert(tk.END, item)
+            if item.endswith("/ date from") or item.endswith("/ date to"):
+                base, suffix = item.rsplit("/", 1)
+                base = base.strip()
+                if base not in parents:
+                    parents[base] = self.tree_source.insert("", "end", text=base, open=True)
+                self.tree_source.insert(parents[base], "end", text=suffix.strip(), values=[item])
 
     def _refresh_pilots_listbox(self):
         self.lb_pilots.delete(0, tk.END)
-        for mem_num, name in self.pilots:
-            self.lb_pilots.insert(tk.END, f"{mem_num} — {name}")
+        for name, membership, pilot_id in self.pilots:
+            self.lb_pilots.insert(tk.END, f"{membership} — {name} - {pilot_id}")
 
     # ---------- mapping operations ----------------------------------------
 
@@ -292,20 +321,34 @@ class MapperGUI(tk.Tk):
             self._create_mapping()
 
     def _map_clicked(self):
-        if not self._selected_source():
-            messagebox.showwarning("No source", "Select an item from the left list.")
+        source = self._selected_source()
+        target_sel = self.tree.selection()
+        if not source or not target_sel:
             return
-        if not self._selected_tree_leaf():
-            messagebox.showwarning(
-                "Invalid target",
-                "Select a *leaf* node in the tree (branches cannot be mapped)."
-            )
+
+        target_id = target_sel[0]
+        # Only allow mapping to leaf nodes
+        if self.tree.get_children(target_id):
             return
-        self._create_mapping()
+
+        target_path = self._get_tree_path(target_id)
+        pair = (source, target_path)
+        if pair not in self.mappings:
+            self.mappings.append(pair)
+            self._refresh_mapping_listbox()
+
 
     def _selected_source(self):
-        sel = self.lb_source.curselection()
-        return self.lb_source.get(sel) if sel else None
+        sel = self.tree_source.selection()
+        if not sel:
+            return None
+        item_id = sel[0]
+        parent_id = self.tree_source.parent(item_id)
+        if not parent_id:
+            return None  # root-level = not mappable
+        parent_text = self.tree_source.item(parent_id, "text")
+        child_text = self.tree_source.item(item_id, "text")
+        return f"{parent_text} / {child_text}"
 
     def _selected_tree_leaf(self):
         focus = self.tree.focus()
@@ -325,53 +368,69 @@ class MapperGUI(tk.Tk):
         self.mappings.append((src, dst))
         self.lb_mappings.insert(tk.END, f"{src}  →  {dst}")
 
+    def _delete_selected_mapping(self):
+        sel = self.lb_mappings.curselection()
+        if not sel:
+            messagebox.showinfo("No selection", "Select a mapping to delete.")
+            return
+        idx = sel[0]
+        del self.mappings[idx]
+        self._refresh_mapping_listbox()
+    
+
     # ---------- save / load mappings --------------------------------------
 
     def _save_json(self):
-        if not self.mappings:
-            messagebox.showinfo("Nothing to save", "No mappings to save yet.")
-            return
         fpath = filedialog.asksaveasfilename(
-            title="Save mappings",
             defaultextension=".json",
-            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
-        )
-        if fpath:
-            try:
-                with open(fpath, "w", encoding="utf-8") as f:
-                    json.dump(self.mappings, f, indent=2)
-                messagebox.showinfo("Saved", f"Mappings written to:\n{fpath}")
-            except Exception as e:
-                messagebox.showerror("Save error", str(e))
-
-    def _load_json(self):
-        fpath = filedialog.askopenfilename(
-            title="Load mappings",
-            defaultextension=".json",
-            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            filetypes=[("JSON files", "*.json")],
         )
         if not fpath:
             return
-        try:
-            with open(fpath, "r", encoding="utf-8") as f:
-                loaded = json.load(f)
 
-            valid = []
-            # If the source list is empty, populate it from loaded mappings' sources
-            if not self.source_items:
-                sources_from_loaded = sorted(set(src for src, _ in loaded))
-                if sources_from_loaded:
-                    self.source_items = sources_from_loaded
-                    self._refresh_source_listbox()
+        result = {}
+        for src, tgt_path in self.mappings:
+            tgt_parts = [part.strip() for part in tgt_path.split("///")]
+            current = result
+            for part in tgt_parts[:-1]:
+                current = current.setdefault(part, {})
+            current.setdefault(tgt_parts[-1], []).append(src)
 
-            for src, leaf in loaded:
-                if src in self.source_items and self._leaf_exists(leaf):
-                    valid.append((src, leaf))
-            self.mappings = valid
-            self._refresh_mapping_listbox()
-            messagebox.showinfo("Loaded", f"{len(valid)} mappings loaded.")
-        except Exception as e:
-            messagebox.showerror("Load error", str(e))
+        with open(fpath, "w", encoding="utf-8") as f:
+            json.dump(result, f, indent=2)
+
+
+    def _load_json(self):
+        fpath = filedialog.askopenfilename(
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
+        )
+        if not fpath:
+            return
+
+        with open(fpath, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        self.mappings.clear()
+
+        def recurse(obj, path):
+            if isinstance(obj, dict):
+                for k, v in obj.items():
+                    recurse(v, path + [k])
+            elif isinstance(obj, list):
+                for src in obj:
+                    self.mappings.append((src, " /// ".join(path)))
+
+        recurse(data, [])
+        self._refresh_mapping_listbox()
+
+
+    def _get_tree_path(self, item_id):
+        parts = []
+        while item_id:
+            parts.insert(0, self.tree.item(item_id, "text"))
+            item_id = self.tree.parent(item_id)
+        return " /// ".join(parts)
+
 
     def _leaf_exists(self, name: str) -> bool:
         def rec(node):
@@ -382,8 +441,9 @@ class MapperGUI(tk.Tk):
 
     def _refresh_mapping_listbox(self):
         self.lb_mappings.delete(0, tk.END)
-        for src, dst in self.mappings:
-            self.lb_mappings.insert(tk.END, f"{src}  →  {dst}")
+        for src, tgt in self.mappings:
+            self.lb_mappings.insert(tk.END, f"{src}  →  {tgt}")
+
 
     # ---------- tree reload -----------------------------------------------
 
