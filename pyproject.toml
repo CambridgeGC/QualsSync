@@ -1,9 +1,10 @@
 [project]
 name = "QualsSync"
 version = "0.1.0"
+package-mode = false
 description = "A Tkinter-based Excel-to-API mapper for pilot qualifications"
 authors = [
-    { name = "Your Name", email = "you@example.com" }
+    { name = "Bruno Tagliapietra", email = "bruno.tagliapietra@gmail.com" }
 ]
 dependencies = [
     "pandas",
