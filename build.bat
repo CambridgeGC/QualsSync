@@ -13,7 +13,7 @@ if %ERRORLEVEL% EQU 0 (
     echo Detected outdated poetry.lock, running poetry lock...
     poetry lock
     echo Re-running poetry install...
-    poetry install
+    poetry install --no-root
 ) else (
     echo Poetry install completed without lock file errors.
 )
