@@ -10,7 +10,7 @@ from excel_loader import ExcelLoader
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Excel ↔ API‑Tree Mapper")
+        self.title("QualsSync - maps and synchronises technical qualifications")
         self.minsize(900, 600)
         self.config_data = load_config()
 
