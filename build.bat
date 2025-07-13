@@ -27,4 +27,5 @@ REM Step 4: Copy config.json.template to dist as config.json
 copy /Y config.json.template dist\config.json
 
 echo Build complete. Executable is dist\QualsSync.exe
+echo Remember to EDIT dist\config.json and enter the correct information (url, API key, ...)
 pause
