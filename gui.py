@@ -4,8 +4,8 @@ from tkinter import filedialog
 import json
 
 from config import load_config
-import api_loader
-import excel_loader
+from api_client import ApiClient
+from excel_loader import ExcelLoader
 
 class MapperGUI(tk.Tk):
     def __init__(self):
@@ -19,10 +19,10 @@ class MapperGUI(tk.Tk):
         self.mappings: list[tuple[str, str]] = []
         self.pilots: list[tuple[str, str, str]] = []
 
-        self.target_tree_dict = self._load_target_tree()
+        self.excel_loader = ExcelLoader(self.config_data)
+        self.api = ApiClient(self.config_data)
 
         self._build_widgets()
-        self._populate_tree(self.target_tree_dict, "")
 
     # ----------- Widget Layout -----------------------------
 
@@ -57,7 +57,11 @@ class MapperGUI(tk.Tk):
         tgt_frame.columnconfigure(0, weight=1)
         tgt_frame.rowconfigure(1, weight=1)
 
-        ttk.Label(tgt_frame, text="Target hierarchy").grid(row=0, column=0, sticky="w")
+        hdr_tgt = ttk.Frame(tgt_frame)
+        hdr_tgt.grid(row=0, column=0, columnspan=2, sticky="ew")
+        hdr_tgt.columnconfigure(0, weight=1)
+        ttk.Label(hdr_tgt, text="Target hierarchy").grid(row=0, column=0, sticky="w")
+        ttk.Button(hdr_tgt, text="Load Target Tree", command=self._reload_tree).grid(row=0, column=1, sticky="e")
         self.tree = ttk.Treeview(tgt_frame, show="tree", selectmode="browse")
         yscroll_tree = ttk.Scrollbar(tgt_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=yscroll_tree.set)
@@ -103,12 +107,21 @@ class MapperGUI(tk.Tk):
         self.lb_pilots.configure(yscrollcommand=yscroll_pilots.set)
         yscroll_pilots.grid(row=5, column=1, sticky="ns")
 
+        # Upload button
+        self.btn_upload = ttk.Button(
+            bottom,
+            text="Upload Accounts Data",
+            command=self.upload_accounts_data,
+            state=tk.DISABLED  # only enabled when ready
+        )
+        self.btn_upload.grid(row=6, column=0, sticky="ew", pady=(0, 4))
+
     # ----------- Data Loading -----------------------------
 
     def _load_target_tree(self):
         # Load accounts and competencies subtree from API
-        accounts = api_loader.load_account_leaves(self.config_data)
-        competencies = api_loader.load_competencies_subtree(self.config_data)
+        accounts = self.api.load_account_leaves()
+        competencies = self.api.load_competencies_subtree()
         tree = {}
         if accounts and accounts[0] != "(error loading accounts)":
             tree["Accounts"] = accounts
@@ -137,14 +150,46 @@ class MapperGUI(tk.Tk):
     # ----------- Excel Loading -----------------------------
 
     def _load_excel(self):
-        source_items, pilots = excel_loader.load_excel_and_pilots(self.config_data, self.lb_pilots)
-        if not source_items:
-            return
+        self.excel_loader.load_excel()
+
+        # Expand base items for left pane
+        base_items = sorted(
+            {row["type"] for row in self.excel_loader.rows}
+        )
+        source_items = []
+        for item in base_items:
+            source_items.append(f"{item} / date from")
+            source_items.append(f"{item} / date to")
+
+        # Fetch account data from server
+        self.account_map = self.api.fetch_accounts_map()
+
+        # Build unique pilot list
+        seen = set()
+        pilots = []
+        for row in self.excel_loader.rows:
+            membership = int(row["membership"])
+            name = row["name"]
+            if membership not in seen:
+                seen.add(membership)
+                pilot_id = self.account_map.get(membership, None)
+                pilots.append((name, membership, pilot_id))
+        
         self.source_items = source_items
         self.pilots = pilots
+        
+        # Update pilots listbox
+        self.lb_pilots.delete(0, tk.END)
+        for name, membership, pilot_id in self.pilots:
+            self.lb_pilots.insert(tk.END, f"{membership} — {name} - {pilot_id}")
+
+        # Update source items listbox
         self.tree_source.delete(*self.tree_source.get_children())
         for item in source_items:
             self.tree_source.insert("", "end", text=item, open=True)
+
+        # Update upload button state
+        self._update_upload_button_state()            
 
     # ----------- Mapping Logic -----------------------------
 
@@ -165,6 +210,8 @@ class MapperGUI(tk.Tk):
 
         self.mappings.append((source_text, target_text))
         self._update_mappings_list()
+        # Update upload button state
+        self._update_upload_button_state()          
 
     def _update_mappings_list(self):
         self.lb_mappings.delete(0, tk.END)
@@ -221,10 +268,53 @@ class MapperGUI(tk.Tk):
             if isinstance(loaded, list) and all(isinstance(t, list) or isinstance(t, tuple) and len(t)==2 for t in loaded):
                 self.mappings = [(str(src), str(tgt)) for src, tgt in loaded]
                 self._update_mappings_list()
+                # Update upload button state
+                self._update_upload_button_state()
             else:
                 messagebox.showerror("Error", "Invalid mappings JSON format.")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load mappings:\n{e}")
+
+    # ----------- Save data into Gliding.App ----------
+
+    def upload_accounts_data(self):
+        updates_by_pilot = {}
+
+        for excel_value_type, full_key in self.mappings:
+            if not full_key.startswith("Accounts /"):
+                continue
+
+            field_name = full_key.split(" / ", 1)[1]
+            row_type = excel_value_type.split(' / ', 1)[0]
+
+            for _, membership, pilot_id in self.pilots:
+                if pilot_id is None:
+                    continue
+
+                matching_rows = [
+                    r for r in self.excel_loader.rows
+                    if str(r["membership"]) == str(membership) and r["type"] == row_type
+                ]
+
+                if not matching_rows:
+                    continue
+
+                if pilot_id not in updates_by_pilot:
+                    updates_by_pilot[pilot_id] = {}
+
+                for r in matching_rows:
+                    if r["value_from"]:
+                        updates_by_pilot[pilot_id][field_name] = r["value_from"]
+                    if r["value_to"]:
+                        to_field = field_name.replace("_from", "_to")
+                        updates_by_pilot[pilot_id][to_field] = r["value_to"]
+
+        for pilot_id, data in updates_by_pilot.items():
+            try:
+                self.api.put_account_data(pilot_id, data)
+            except Exception as e:
+                print(f"Failed to upload pilot {pilot_id}: {e}")
+
 
     # ----------- Debug -----------------------
 
@@ -245,6 +335,15 @@ class MapperGUI(tk.Tk):
         if sel_target and sel_source:
             self._map_clicked()
 
+    # ----------- Enable update --------------
+
+    def _update_upload_button_state(self):
+        has_excel = self.excel_loader.has_excel()
+        has_any_mappings = bool(self.mappings)
+        if has_excel and has_any_mappings:
+            self.btn_upload.config(state=tk.NORMAL)
+        else:
+            self.btn_upload.config(state=tk.DISABLED)
 
 if __name__ == "__main__":
     app = MapperGUI()

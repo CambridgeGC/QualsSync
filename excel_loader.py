@@ -1,69 +1,82 @@
-import tkinter as tk
 from tkinter import filedialog, messagebox
 try:
     import pandas as pd
 except ModuleNotFoundError:
     pd = None
+from datetime import datetime, timedelta
+import dateutil.parser
 
-from api_loader import fetch_accounts_map
 
-def load_excel_and_pilots(config, lb_pilots) -> tuple[list[str], list[tuple[str,str,str]]]:
-    """
-    Returns (expanded source_items, pilots list)
-    Also updates the given pilots Listbox widget.
-    """
-    if pd is None:
-        messagebox.showerror(
-            "Dependency missing",
-            "pandas (and openpyxl) are required:\n\npip install pandas openpyxl"
+class ExcelLoader:
+    def __init__(self, config):
+        self.config = config
+        self.rows = []
+
+    def has_excel(self) -> bool:
+        return bool(self.rows) 
+
+    def load_excel(self):
+        """
+        Loads Excel file, updates pilots listbox, populates internal rows and pilots.
+        Returns (expanded source_items, pilots list).
+        """
+        if pd is None:
+            messagebox.showerror(
+                "Dependency missing",
+                "pandas (and openpyxl) are required:\n\npip install pandas openpyxl"
+            )
+            return [], []
+
+        fpath = filedialog.askopenfilename(
+            title="Select Excel file",
+            filetypes=[("Excel files", "*.xlsx *.xls"), ("All files", "*.*")],
         )
-        return [], []
+        if not fpath:
+            return [], []
 
-    fpath = filedialog.askopenfilename(
-        title="Select Excel file",
-        filetypes=[("Excel files", "*.xlsx *.xls"), ("All files", "*.*")],
-    )
-    if not fpath:
-        return [], []
+        try:
+            df = pd.read_excel(fpath, sheet_name=0, engine="openpyxl", header=4)
+        except Exception as e:
+            messagebox.showerror("Error reading Excel", str(e))
+            return [], []
 
-    df = pd.read_excel(fpath, sheet_name=0, engine="openpyxl", header=4)
-    if df.shape[1] < 3:
-        messagebox.showerror("Error", "First sheet has fewer than 3 columns.")
-        return [], []
+        if df.shape[1] < 3:
+            messagebox.showerror("Error", "First sheet has fewer than 3 columns.")
+            return [], []
 
-    membership_col = 'ACCOUNT'  
-    name_col = 'NAME'
+        membership_col = 'ACCOUNT'
+        name_col = 'NAME'
 
-    # Extract unique base items from column C
-    base_items = sorted(
-        {str(v).strip() for v in df.iloc[:, 2].dropna() if str(v).strip()}
-    )
-    if not base_items:
-        messagebox.showerror("Error", "No non‑blank values in column C.")
-        return [], []
+        # Extract rows
+        self.rows = []
+        for _, row in df.iterrows():
+            membership = str(row[membership_col]).strip()
+            name = str(row[name_col]).strip()
+            row_type = str(row.iloc[2]).strip()
+            value_from = self._parse_excel_date(row.iloc[4])
+            value_to = self._parse_excel_date(row.iloc[5])
+            self.rows.append({
+                "membership": membership,
+                "name": name,
+                "type": row_type,
+                "value_from": value_from,
+                "value_to": value_to
+            })
 
-    # Expand each base item to include /date from and /date to children
-    expanded = []
-    for item in base_items:
-        expanded.append(f"{item} / date from")
-        expanded.append(f"{item} / date to")
-
-    # Fetch account data from server
-    account_map = fetch_accounts_map(config)
-
-    # Extract unique pilots
-    df_unique_pilots = df.drop_duplicates(subset=membership_col, keep='first')
-
-    pilots = []
-    for _, row in df_unique_pilots.iterrows():
-        membership = row[membership_col]
-        name = row[name_col]
-        pilot_id = account_map.get(membership, None)  # None if no match
-        pilots.append((name, membership, pilot_id))
-
-    # Update pilots Listbox
-    lb_pilots.delete(0, tk.END)
-    for name, membership, pilot_id in pilots:
-        lb_pilots.insert(tk.END, f"{membership} — {name} - {pilot_id}")
-
-    return expanded, pilots
+        return
+    
+    @staticmethod
+    def _parse_excel_date(value):
+        if value is None or value == '':
+            return None
+        try:
+            if isinstance(value, datetime):
+                return value.strftime("%Y-%m-%d")
+            if isinstance(value, (int, float)):
+                # Excel serial date
+                excel_epoch = datetime(1899, 12, 30)
+                return (excel_epoch + timedelta(days=int(value))).strftime("%Y-%m-%d")
+            if isinstance(value, str):
+                return dateutil.parser.parse(value, dayfirst=True).strftime("%Y-%m-%d")
+        except Exception:
+            return None
