@@ -45,7 +45,6 @@ def load_excel_and_pilots(config, lb_pilots) -> tuple[list[str], list[tuple[str,
     # Expand each base item to include /date from and /date to children
     expanded = []
     for item in base_items:
-        expanded.append(item)  # base (non-mappable)
         expanded.append(f"{item} / date from")
         expanded.append(f"{item} / date to")
 

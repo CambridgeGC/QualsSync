@@ -156,7 +156,7 @@ class MapperGUI(tk.Tk):
             return
 
         source_text = self.tree_source.item(sel_source[0])["text"]
-        target_text = self.tree.item(sel_target[0])["text"]
+        target_text = self._get_full_tree_path(sel_target[0])
 
         # Only allow mapping leaves in target tree
         if self.tree.get_children(sel_target[0]):
@@ -171,6 +171,7 @@ class MapperGUI(tk.Tk):
         for source, target in self.mappings:
             self.lb_mappings.insert(tk.END, f"{source} → {target}")
 
+
     def _delete_selected_mapping(self):
         sel = self.lb_mappings.curselection()
         if not sel:
@@ -178,6 +179,14 @@ class MapperGUI(tk.Tk):
         index = sel[0]
         del self.mappings[index]
         self._update_mappings_list()
+
+    def _get_full_tree_path(self, item_id):
+        parts = []
+        while item_id:
+            parts.insert(0, self.tree.item(item_id)["text"])
+            item_id = self.tree.parent(item_id)
+        return " / ".join(parts)
+
 
     # ----------- Save/Load mappings -----------------------
 
