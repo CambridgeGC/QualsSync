@@ -7,7 +7,7 @@ from config import load_config
 from api_client import ApiClient
 from excel_loader import ExcelLoader
 
-class MapperGUI(tk.Tk):
+class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Excel ↔ API‑Tree Mapper")

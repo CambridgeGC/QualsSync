@@ -1,0 +1,17 @@
+[project]
+name = "QualsSync"
+version = "0.1.0"
+description = "A Tkinter-based Excel-to-API mapper for pilot qualifications"
+authors = [
+    { name = "Your Name", email = "you@example.com" }
+]
+dependencies = [
+    "pandas",
+    "openpyxl",
+    "requests",
+    "python-dateutil (>=2.9.0.post0,<3.0.0)"
+]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
