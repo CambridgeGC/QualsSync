@@ -9,6 +9,9 @@ from excel_loader import ExcelLoader
 from competency import Competency
 from serializer import Serializer
 
+import threading
+
+
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -339,8 +342,18 @@ class App(tk.Tk):
     # ----------- Save data into Gliding.App ----------
 
     def upload_data(self):
-        self._upload_account_data()
-        self._upload_competencies_data()
+        def task():
+            self._upload_account_data()
+            self._upload_competencies_data()
+            return "Upload completed"
+
+        def done(result):
+            if isinstance(result, Exception):
+                messagebox.showerror("Error", str(result))
+            else:
+                messagebox.showinfo("Success", result)
+
+        self.run_with_modal("Uploading", "Please wait while uploading...", task, done)
 
     def _upload_competencies_data(self):
         for excel_value_type, full_key in self.mappings:
@@ -430,3 +443,33 @@ class App(tk.Tk):
             self.btn_upload.config(state=tk.NORMAL)
         else:
             self.btn_upload.config(state=tk.DISABLED)
+
+    def run_with_modal(self, title, message, task, on_complete=None):
+        # Create modal dialog
+        modal = tk.Toplevel(self)
+        modal.title(title)
+        modal.transient(self)
+        modal.grab_set()  # Make it modal
+        modal.resizable(False, False)
+
+        label = tk.Label(modal, text=message, padx=20, pady=20)
+        label.pack()
+
+        # Center the modal
+        self.update_idletasks()
+        x = self.winfo_rootx() + (self.winfo_width() // 2) - (modal.winfo_reqwidth() // 2)
+        y = self.winfo_rooty() + (self.winfo_height() // 2) - (modal.winfo_reqheight() // 2)
+        modal.geometry(f"+{x}+{y}")
+
+        def worker():
+            try:
+                result = task()
+            except Exception as e:
+                result = e
+            def finish():
+                modal.destroy()
+                if on_complete:
+                    on_complete(result)
+            self.after(0, finish)
+
+        threading.Thread(target=worker, daemon=True).start()
