@@ -6,6 +6,7 @@ import json
 from config import load_config
 from api_client import ApiClient
 from excel_loader import ExcelLoader
+from competency import Competency
 
 class App(tk.Tk):
     def __init__(self):
@@ -16,8 +17,9 @@ class App(tk.Tk):
 
         # Data holders
         self.source_items: list[str] = []
-        self.mappings: list[tuple[str, str]] = []
+        self.mappings: list[tuple[str, str | Competency]] = []
         self.pilots: list[tuple[str, str, str]] = []
+        self._competency_map: dict[str, Competency] = {}
 
         self.excel_loader = ExcelLoader(self.config_data)
         self.api = ApiClient(self.config_data)
@@ -110,8 +112,8 @@ class App(tk.Tk):
         # Upload button
         self.btn_upload = ttk.Button(
             bottom,
-            text="Upload Accounts Data",
-            command=self.upload_accounts_data,
+            text="Upload Data",
+            command=self.upload_data,
             state=tk.DISABLED  # only enabled when ready
         )
         self.btn_upload.grid(row=6, column=0, sticky="ew", pady=(0, 4))
@@ -141,7 +143,11 @@ class App(tk.Tk):
                 self._populate_tree(v, iid)
         elif isinstance(d, list):
             for item in d:
-                self.tree.insert(parent, "end", text=item, open=True)
+                if isinstance(item, Competency):
+                    iid = self.tree.insert(parent, "end", text=item.name, values=[item], open=True)
+                    self._competency_map[iid] = item
+                else:
+                    self.tree.insert(parent, "end", text=str(item), open=True)
         else:
             # single string or None
             if d:
@@ -200,13 +206,14 @@ class App(tk.Tk):
             messagebox.showinfo("Select items", "Please select an item on both Source and Target trees.")
             return
 
-        source_text = self.tree_source.item(sel_source[0])["text"]
-        target_text = self._get_full_tree_path(sel_target[0])
-
         # Only allow mapping leaves in target tree
         if self.tree.get_children(sel_target[0]):
             messagebox.showwarning("Mapping restriction", "Only leaf nodes in target tree can be mapped.")
             return
+        
+        source_text = self.tree_source.item(sel_source[0])["text"]
+        target_iid = sel_target[0]
+        target_text = self._get_full_tree_path(target_iid)
 
         if target_text.startswith("Competencies"):
             # Determine base source item (remove split suffix if present)
@@ -222,7 +229,14 @@ class App(tk.Tk):
             # Use the base item label for the mapping key
             source_text = base_item
 
-        self.mappings.append((source_text, target_text))
+        # Try to get a Competency object from the iid
+        target_competency = self._competency_map.get(target_iid)
+        if target_competency:
+            target = target_competency
+        else:
+            target = target_text  # fallback if it's not a competency
+
+        self.mappings.append((source_text, target))
         self._update_mappings_list()
         # Update upload button state
         self._update_upload_button_state()          
@@ -230,7 +244,11 @@ class App(tk.Tk):
     def _update_mappings_list(self):
         self.lb_mappings.delete(0, tk.END)
         for source, target in self.mappings:
-            self.lb_mappings.insert(tk.END, f"{source} → {target}")
+            if isinstance(target, Competency):
+                target_label = target.path
+            else:
+                target_label = target
+            self.lb_mappings.insert(tk.END, f"{source} → {target_label}")
 
 
     def _delete_selected_mapping(self):
@@ -262,9 +280,16 @@ class App(tk.Tk):
         )
         if not fname:
             return
+        serializable = []
+        for source, target in self.mappings:
+            if isinstance(target, Competency):
+                target_data = {"__type__": "Competency", **target.to_dict()}
+            else:
+                target_data = {"__type__": "str", "value": target}
+            serializable.append({"source": source, "target": target_data})
         try:
             with open(fname, "w", encoding="utf-8") as f:
-                json.dump(self.mappings, f, indent=2)
+                json.dump(serializable, f, indent=2)
             messagebox.showinfo("Saved", f"Mappings saved to {fname}")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save:\n{e}")
@@ -279,14 +304,22 @@ class App(tk.Tk):
         try:
             with open(fname, "r", encoding="utf-8") as f:
                 loaded = json.load(f)
-            if isinstance(loaded, list) and all(isinstance(t, list) or isinstance(t, tuple) and len(t)==2 for t in loaded):
-                self.mappings = [(str(src), str(tgt)) for src, tgt in loaded]
+                self.mappings.clear()
+                for pair in loaded:
+                    source = pair["source"]
+                    target_data = pair["target"]
+                    if target_data["__type__"] == "Competency":
+                        target = Competency.from_dict(target_data)
+                    else:
+                        target = target_data["value"]
+                    self.mappings.append((source, target))
                 self._update_mappings_list()
                 # Update upload button state
                 self._update_upload_button_state()
+
                 # Unsplit where necessary
-                for source_label, target_iid in self.mappings:
-                    if target_iid.startswith("Competencies"):
+                for source_label, target in self.mappings:
+                    if isinstance(target, Competency):
                         # Determine base source item
                         base_item = source_label
                         if base_item.endswith(" / date from"):
@@ -295,8 +328,6 @@ class App(tk.Tk):
                             base_item = base_item.replace(" / date to", "")
                         # Unsplit if necessary
                         self.unsplit_source_item(base_item)
-            else:
-                messagebox.showerror("Error", "Invalid mappings JSON format.")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load mappings:\n{e}")
 
@@ -332,11 +363,46 @@ class App(tk.Tk):
 
     # ----------- Save data into Gliding.App ----------
 
-    def upload_accounts_data(self):
+    def upload_data(self):
+        self._upload_account_data()
+        self._upload_competencies_data()
+
+    def _upload_competencies_data(self):
+        for excel_value_type, full_key in self.mappings:
+            if isinstance(full_key, Competency):
+                competency = full_key
+            else:
+                continue
+
+            row_type = excel_value_type.split(' / ', 1)[0]
+            
+            for _, membership, pilot_id in self.pilots:
+                if pilot_id is None:
+                    continue
+
+                matching_rows = [
+                    r for r in self.excel_loader.rows
+                    if str(r["membership"]) == str(membership) and r["type"] == row_type
+                ]
+
+                if len(matching_rows) <1:
+                    continue
+                
+                if len(matching_rows) > 1:
+                    raise ValueError(f"Expected at most 1 row for membership={membership}, type={row_type}, but found {len(matching_rows)}")
+
+                row = matching_rows[0]
+
+                if Competency.should_assign(row["value_from"], row["value_to"]):
+                    self.api.assign_competency(pilot_id, competency.id)
+                else:
+                    self.api.revoke_competency(pilot_id, competency.id)
+    
+    def _upload_account_data(self):
         updates_by_pilot = {}
 
         for excel_value_type, full_key in self.mappings:
-            if not full_key.startswith("Accounts /"):
+            if isinstance(full_key, Competency): #if it's not a competency, it goes in the Account
                 continue
 
             field_name = full_key.split(" / ", 1)[1]
@@ -368,7 +434,7 @@ class App(tk.Tk):
             try:
                 self.api.put_account_data(pilot_id, data)
             except Exception as e:
-                print(f"Failed to upload pilot {pilot_id}: {e}")
+                print(f"Failed to upload account data for pilot {pilot_id}: {e}")        
 
 
     # ----------- Debug -----------------------
@@ -399,7 +465,3 @@ class App(tk.Tk):
             self.btn_upload.config(state=tk.NORMAL)
         else:
             self.btn_upload.config(state=tk.DISABLED)
-
-if __name__ == "__main__":
-    app = MapperGUI()
-    app.mainloop()

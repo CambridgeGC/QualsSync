@@ -1,34 +1,77 @@
 [
-  [
-    "Medical",
-    "medical_valid_to"
-  ],
-  [
-    "SPL FI(S) Seminar",
-    "fis_date_refresher_course"
-  ],
-  [
-    "SPL LM W",
-    "Winch launch"
-  ],
-  [
-    "SPL LM AT",
-    "Aerotow launch"
-  ],
-  [
-    "SPL LM S",
-    "Self launch"
-  ],
-  [
-    "CGC SELF AUTH",
-    "SA XC"
-  ],
-  [
-    "SPL TMG EXT",
-    "TMG Rating"
-  ],
-  [
-    "Power - PPL",
-    "SEP Rating"
-  ]
+  {
+    "source": "Medical / date from",
+    "target": {
+      "__type__": "str",
+      "value": "Accounts / medical_valid_from"
+    }
+  },
+  {
+    "source": "Medical / date to",
+    "target": {
+      "__type__": "str",
+      "value": "Accounts / medical_valid_to"
+    }
+  },
+  {
+    "source": "SPL FI(S) Seminar / date from",
+    "target": {
+      "__type__": "str",
+      "value": "Accounts / fis_date_refresher_course"
+    }
+  },
+  {
+    "source": "SPL LM W",
+    "target": {
+      "__type__": "Competency",
+      "name": "Winch launch",
+      "id": 1,
+      "path": "Competencies / SPL Privileges / Launch methods / Winch launch"
+    }
+  },
+  {
+    "source": "SPL LM AT",
+    "target": {
+      "__type__": "Competency",
+      "name": "Aerotow launch",
+      "id": 2,
+      "path": "Competencies / SPL Privileges / Launch methods / Aerotow launch"
+    }
+  },
+  {
+    "source": "SPL LM S",
+    "target": {
+      "__type__": "Competency",
+      "name": "Self launch",
+      "id": 3,
+      "path": "Competencies / SPL Privileges / Launch methods / Self launch"
+    }
+  },
+  {
+    "source": "CGC SELF AUTH",
+    "target": {
+      "__type__": "Competency",
+      "name": "SA XC",
+      "id": 329,
+      "path": "Competencies / Flying Privileges / Auth / SA XC"
+    }
+  },
+  {
+    "source": "SPL TMG EXT",
+    "target": {
+      "__type__": "Competency",
+      "name": "TMG Rating",
+      "id": 6,
+      "path": "Competencies / SPL Privileges / Launch methods / TMG Rating"
+    }
+  },
+  {
+    "source": "Power - PPL",
+    "target": {
+      "__type__": "Competency",
+      "name": "SEP Rating",
+      "id": 7,
+      "path": "Competencies / SPL Privileges / Launch methods / SEP Rating"
+    }
+  }
 ]

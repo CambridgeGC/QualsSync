@@ -1,5 +1,6 @@
 import requests
 from tkinter import messagebox
+from competency import Competency
 
 
 class ApiClient:
@@ -38,7 +39,11 @@ class ApiClient:
                     continue
                 for cat in cur.get("categories", []):
                     comps = [
-                        comp["name"]
+                        Competency(
+                            comp["name"], 
+                            " / ".join(["Competencies", cur.get("name"), cat.get("name"), comp["name"]]) , 
+                            comp.get("id", None)
+                            )
                         for comp in cat.get("competencies", [])
                         if not comp.get("is_dto")
                     ]
@@ -54,6 +59,7 @@ class ApiClient:
         except Exception as e:
             messagebox.showerror("API error", f"Could not load competencies:\n{e}")
             return {"(error loading competencies)": []}
+
 
     def fetch_accounts_map(self):
         url = f"{self.base_url}/api/accounts.json"
@@ -78,4 +84,35 @@ class ApiClient:
             return response.json()
         except Exception as e:
             messagebox.showerror("Error", f"Failed to update accounts: {e}")
-            return {}
+            return 
+        {}
+    
+    def assign_competency(self, pilot_id, competency_id):
+        url = f"{self.base_url}/api/competencies/assign.json"
+        body = {
+            "user_id": pilot_id,
+            "id": competency_id
+        }
+        try:
+            response = requests.post(url, json=body, headers=self.headers, timeout=10)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to assign competency: {e}")
+            return 
+        {}
+    
+    def revoke_competency(self, pilot_id, competency_id):
+        url = f"{self.base_url}/api/competencies/revoke.json"
+        body = {
+            "user_id": pilot_id,
+            "id": competency_id
+        }
+        try:
+            response = requests.post(url, json=body, headers=self.headers, timeout=10)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to revoke competency: {e}")
+            return 
+        {}
