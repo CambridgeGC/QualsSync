@@ -208,6 +208,20 @@ class App(tk.Tk):
             messagebox.showwarning("Mapping restriction", "Only leaf nodes in target tree can be mapped.")
             return
 
+        if target_text.startswith("Competencies"):
+            # Determine base source item (remove split suffix if present)
+            base_item = source_text
+            if base_item.endswith(" / date from"):
+                base_item = base_item.replace(" / date from", "")
+            elif base_item.endswith(" / date to"):
+                base_item = base_item.replace(" / date to", "")
+
+            # Unsplit in the source tree
+            self.unsplit_source_item(base_item)
+
+            # Use the base item label for the mapping key
+            source_text = base_item
+
         self.mappings.append((source_text, target_text))
         self._update_mappings_list()
         # Update upload button state
@@ -270,10 +284,51 @@ class App(tk.Tk):
                 self._update_mappings_list()
                 # Update upload button state
                 self._update_upload_button_state()
+                # Unsplit where necessary
+                for source_label, target_iid in self.mappings:
+                    if target_iid.startswith("Competencies"):
+                        # Determine base source item
+                        base_item = source_label
+                        if base_item.endswith(" / date from"):
+                            base_item = base_item.replace(" / date from", "")
+                        elif base_item.endswith(" / date to"):
+                            base_item = base_item.replace(" / date to", "")
+                        # Unsplit if necessary
+                        self.unsplit_source_item(base_item)
             else:
                 messagebox.showerror("Error", "Invalid mappings JSON format.")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load mappings:\n{e}")
+
+    def unsplit_source_item(self, base_item):
+        from_label = f"{base_item} / date from"
+        to_label = f"{base_item} / date to"
+
+        # Get list of items and their positions
+        all_items = self.tree_source.get_children()
+        positions = []
+
+        # Find and remove split items
+        for iid in all_items:
+            text = self.tree_source.item(iid, 'text')
+            if text == from_label or text == to_label:
+                positions.append(all_items.index(iid))
+                self.tree_source.delete(iid)
+
+        if not positions:
+            return  # Nothing to insert
+
+        # Compute insert position (e.g., min of removed items)
+        insert_index = min(positions)
+
+        # Recreate the base item at the same position
+        new_iid = self.tree_source.insert('', insert_index, text=base_item)
+
+        # Select and focus the new item
+        self.tree_source.selection_set(new_iid)
+        self.tree_source.focus(new_iid)
+        self.tree_source.see(new_iid)
+
 
     # ----------- Save data into Gliding.App ----------
 
