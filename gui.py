@@ -1,12 +1,13 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 from tkinter import filedialog
-import json
 
 from config import load_config
 from api_client import ApiClient
 from excel_loader import ExcelLoader
+
 from competency import Competency
+from serializer import Serializer
 
 class App(tk.Tk):
     def __init__(self):
@@ -82,10 +83,8 @@ class App(tk.Tk):
         btnrow = ttk.Frame(bottom)
         btnrow.grid(row=0, column=0, sticky="w", pady=(0,6))
         ttk.Button(btnrow, text="Map selected →", command=self._map_clicked).pack(side="left")
-        ttk.Button(btnrow, text="Print mappings", command=self._debug_print).pack(side="left", padx=4)
-        ttk.Button(btnrow, text="Reload tree", command=self._reload_tree).pack(side="left", padx=(20,4))
-        ttk.Button(btnrow, text="Save mappings…", command=self._save_json).pack(side="left", padx=4)
-        ttk.Button(btnrow, text="Load mappings…", command=self._load_json).pack(side="left", padx=4)
+        ttk.Button(btnrow, text="Save mappings…", command=self._serialise_json).pack(side="left", padx=4)
+        ttk.Button(btnrow, text="Load mappings…", command=self._deserlialise_json).pack(side="left", padx=4)
         ttk.Button(btnrow, text="Delete selected mapping", command=self._delete_selected_mapping).pack(side="left", padx=4)
 
         ttk.Label(bottom, text="Mappings").grid(row=2, column=0, sticky="w")
@@ -216,18 +215,9 @@ class App(tk.Tk):
         target_text = self._get_full_tree_path(target_iid)
 
         if target_text.startswith("Competencies"):
-            # Determine base source item (remove split suffix if present)
-            base_item = source_text
-            if base_item.endswith(" / date from"):
-                base_item = base_item.replace(" / date from", "")
-            elif base_item.endswith(" / date to"):
-                base_item = base_item.replace(" / date to", "")
-
-            # Unsplit in the source tree
-            self.unsplit_source_item(base_item)
-
-            # Use the base item label for the mapping key
-            source_text = base_item
+            self.unsplit_source_item(source_text)
+            # Truncate date_from / date_to
+            source_text = source_text[:source_text.rfind(" / ")] if " / " in source_text else source_text
 
         # Try to get a Competency object from the iid
         target_competency = self._competency_map.get(target_iid)
@@ -267,9 +257,9 @@ class App(tk.Tk):
         return " / ".join(parts)
 
 
-    # ----------- Save/Load mappings -----------------------
+    # ----------- Serialisation -----------------------
 
-    def _save_json(self):
+    def _serialise_json(self):
         if not self.mappings:
             messagebox.showinfo("No mappings", "There are no mappings to save.")
             return
@@ -280,21 +270,14 @@ class App(tk.Tk):
         )
         if not fname:
             return
-        serializable = []
-        for source, target in self.mappings:
-            if isinstance(target, Competency):
-                target_data = {"__type__": "Competency", **target.to_dict()}
-            else:
-                target_data = {"__type__": "str", "value": target}
-            serializable.append({"source": source, "target": target_data})
+
         try:
-            with open(fname, "w", encoding="utf-8") as f:
-                json.dump(serializable, f, indent=2)
+            Serializer(fname).serialize(self.mappings)
             messagebox.showinfo("Saved", f"Mappings saved to {fname}")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save:\n{e}")
 
-    def _load_json(self):
+    def _deserlialise_json(self):
         fname = filedialog.askopenfilename(
             filetypes=[("JSON files", "*.json")],
             title="Load mappings from JSON",
@@ -302,36 +285,28 @@ class App(tk.Tk):
         if not fname:
             return
         try:
-            with open(fname, "r", encoding="utf-8") as f:
-                loaded = json.load(f)
-                self.mappings.clear()
-                for pair in loaded:
-                    source = pair["source"]
-                    target_data = pair["target"]
-                    if target_data["__type__"] == "Competency":
-                        target = Competency.from_dict(target_data)
-                    else:
-                        target = target_data["value"]
-                    self.mappings.append((source, target))
-                self._update_mappings_list()
-                # Update upload button state
-                self._update_upload_button_state()
+            self.mappings.clear()
+            self.mappings = Serializer(fname).deserialize()
 
-                # Unsplit where necessary
-                for source_label, target in self.mappings:
-                    if isinstance(target, Competency):
-                        # Determine base source item
-                        base_item = source_label
-                        if base_item.endswith(" / date from"):
-                            base_item = base_item.replace(" / date from", "")
-                        elif base_item.endswith(" / date to"):
-                            base_item = base_item.replace(" / date to", "")
-                        # Unsplit if necessary
-                        self.unsplit_source_item(base_item)
+            self._update_mappings_list()
+            self._update_upload_button_state()
+            self.unsplit_mappings_to_competencies()
+
+            # Unsplit where necessary
+
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load mappings:\n{e}")
 
+    def unsplit_mappings_to_competencies(self):
+        for source_label, target in self.mappings:
+            if isinstance(target, Competency):
+                self.unsplit_source_item(source_label)        
+
     def unsplit_source_item(self, base_item):
+        if base_item.endswith(" / date from"):
+            base_item = base_item.replace(" / date from", "")
+        elif base_item.endswith(" / date to"):
+            base_item = base_item.replace(" / date to", "")        
         from_label = f"{base_item} / date from"
         to_label = f"{base_item} / date to"
 
@@ -387,7 +362,7 @@ class App(tk.Tk):
 
                 if len(matching_rows) <1:
                     continue
-                
+
                 if len(matching_rows) > 1:
                     raise ValueError(f"Expected at most 1 row for membership={membership}, type={row_type}, but found {len(matching_rows)}")
 
@@ -436,16 +411,6 @@ class App(tk.Tk):
             except Exception as e:
                 print(f"Failed to upload account data for pilot {pilot_id}: {e}")        
 
-
-    # ----------- Debug -----------------------
-
-    def _debug_print(self):
-        print("Source items:")
-        for si in self.source_items:
-            print(f" - {si}")
-        print("\nMappings:")
-        for src, tgt in self.mappings:
-            print(f"{src} -> {tgt}")
 
     # ----------- Tree double click -----------------------
 
