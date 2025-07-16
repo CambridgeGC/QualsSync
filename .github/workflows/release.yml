@@ -37,13 +37,13 @@ jobs:
         run: ./build.bat ${{ github.event.inputs.tag }}
 
       - name: Zip dist folder
-        run: powershell Compress-Archive -Path dist\* -DestinationPath dist\QualsSync-${{ github.ref_name }}.zip
+        run: powershell Compress-Archive -Path dist\* -DestinationPath dist\QualsSync-${{ github.event.inputs.tag }}.zip
 
       - name: Upload release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag }}
           name: Release ${{ github.event.inputs.tag_name }}
-          files: dist/QualsSync-${{ github.ref_name }}.zip
+          files: dist/QualsSync-${{ github.event.inputs.tag }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
