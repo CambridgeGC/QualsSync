@@ -87,11 +87,15 @@ class ApiClient:
             return 
         {}
     
-    def assign_competency(self, pilot_id, competency_id):
+    def assign_competency(self, pilot_id, competency_id, date_assigned, date_valid_to):
         url = f"{self.base_url}/api/competencies/assign.json"
         body = {
             "user_id": pilot_id,
-            "id": competency_id
+            "id": competency_id,
+            **{k: v for k, v in { # we add date_assigned and date_valid_to only if they are "truthy"
+                "date_assigned": date_assigned,
+                "date_valid_to": date_valid_to
+            }.items() if v}
         }
         try:
             response = requests.post(url, json=body, headers=self.headers, timeout=10)

@@ -382,7 +382,7 @@ class App(tk.Tk):
                 row = matching_rows[0]
 
                 if Competency.should_assign(row["value_from"], row["value_to"]):
-                    self.api.assign_competency(pilot_id, competency.id)
+                    self.api.assign_competency(pilot_id, competency.id, row["value_from"], row["value_to"])
                 else:
                     self.api.revoke_competency(pilot_id, competency.id)
     
