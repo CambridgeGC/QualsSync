@@ -29,7 +29,7 @@ jobs:
           git push origin ${{ github.event.inputs.tag }}
 
       - name: Run build script
-        run: build.bat ${{ github.event.inputs.tag }}
+        run: ./build.bat ${{ github.event.inputs.tag }}
 
       - name: Upload release
         uses: softprops/action-gh-release@v2
