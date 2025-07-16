@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from tkinter import filedialog
 
-from config import load_config
+import config
 from api_client import ApiClient
 from excel_loader import ExcelLoader
 
@@ -15,9 +15,9 @@ import threading
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("QualsSync - maps and synchronises technical qualifications")
+        self.title("QualsSync - maps and synchronises technical qualifications - " + config.VERSION)
         self.minsize(900, 600)
-        self.config_data = load_config()
+        self.config_data = config.load_config()
 
         # Data holders
         self.source_items: list[str] = []
