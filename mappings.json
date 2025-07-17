@@ -25,8 +25,8 @@
     "target": {
       "__type__": "Competency",
       "name": "Winch launch",
-      "id": 1,
-      "path": "Competencies / SPL Privileges / Launch methods / Winch launch"
+      "path": "Competencies / SPL Privileges / Launch methods / Winch launch",
+      "id": 1
     }
   },
   {
@@ -34,8 +34,8 @@
     "target": {
       "__type__": "Competency",
       "name": "Aerotow launch",
-      "id": 2,
-      "path": "Competencies / SPL Privileges / Launch methods / Aerotow launch"
+      "path": "Competencies / SPL Privileges / Launch methods / Aerotow launch",
+      "id": 2
     }
   },
   {
@@ -43,8 +43,8 @@
     "target": {
       "__type__": "Competency",
       "name": "Self launch",
-      "id": 3,
-      "path": "Competencies / SPL Privileges / Launch methods / Self launch"
+      "path": "Competencies / SPL Privileges / Launch methods / Self launch",
+      "id": 3
     }
   },
   {
@@ -52,8 +52,8 @@
     "target": {
       "__type__": "Competency",
       "name": "SA XC",
-      "id": 329,
-      "path": "Competencies / Flying Privileges / Auth / SA XC"
+      "path": "Competencies / Flying Privileges / Auth / SA XC",
+      "id": 329
     }
   },
   {
@@ -61,8 +61,8 @@
     "target": {
       "__type__": "Competency",
       "name": "TMG Rating",
-      "id": 6,
-      "path": "Competencies / SPL Privileges / Launch methods / TMG Rating"
+      "path": "Competencies / SPL Privileges / Launch methods / TMG Rating",
+      "id": 6
     }
   },
   {
@@ -70,8 +70,15 @@
     "target": {
       "__type__": "Competency",
       "name": "SEP Rating",
-      "id": 7,
-      "path": "Competencies / SPL Privileges / Launch methods / SEP Rating"
+      "path": "Competencies / SPL Privileges / Launch methods / SEP Rating",
+      "id": 7
+    }
+  },
+  {
+    "source": "SPL FI(S) DoA / date from",
+    "target": {
+      "__type__": "str",
+      "value": "Accounts / fis_date_training_flight"
     }
   }
 ]
