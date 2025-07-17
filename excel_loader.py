@@ -15,24 +15,11 @@ class ExcelLoader:
     def has_excel(self) -> bool:
         return bool(self.rows) 
 
-    def load_excel(self):
+    def load_excel(self, fpath):
         """
         Loads Excel file, updates pilots listbox, populates internal rows and pilots.
         Returns (expanded source_items, pilots list).
         """
-        if pd is None:
-            messagebox.showerror(
-                "Dependency missing",
-                "pandas (and openpyxl) are required:\n\npip install pandas openpyxl"
-            )
-            return [], []
-
-        fpath = filedialog.askopenfilename(
-            title="Select Excel file",
-            filetypes=[("Excel files", "*.xlsx *.xls"), ("All files", "*.*")],
-        )
-        if not fpath:
-            return [], []
 
         try:
             df = pd.read_excel(fpath, sheet_name=0, engine="openpyxl", header=4)

@@ -67,7 +67,7 @@ class App(tk.Tk):
         hdr_tgt.grid(row=0, column=0, columnspan=2, sticky="ew")
         hdr_tgt.columnconfigure(0, weight=1)
         ttk.Label(hdr_tgt, text="Target hierarchy").grid(row=0, column=0, sticky="w")
-        ttk.Button(hdr_tgt, text="Load Target Tree", command=self._reload_tree).grid(row=0, column=1, sticky="e")
+        ttk.Button(hdr_tgt, text="Load Target Tree", command=self._load_target_tree).grid(row=0, column=1, sticky="e")
         self.tree = ttk.Treeview(tgt_frame, show="tree", selectmode="browse")
         yscroll_tree = ttk.Scrollbar(tgt_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=yscroll_tree.set)
@@ -123,20 +123,22 @@ class App(tk.Tk):
     # ----------- Data Loading -----------------------------
 
     def _load_target_tree(self):
-        # Load accounts and competencies subtree from API
-        accounts = self.api.load_account_leaves()
-        competencies = self.api.load_competencies_subtree()
-        tree = {}
-        if accounts and accounts[0] != "(error loading accounts)":
-            tree["Accounts"] = accounts
-        if competencies and "(error loading competencies)" not in competencies:
-            tree["Competencies"] = competencies
-        return tree
+        def background_task():
+            # Load accounts and competencies subtree from API
+            accounts = self.api.load_account_leaves()
+            competencies = self.api.load_competencies_subtree()
+            tree = {}
+            if accounts and accounts[0] != "(error loading accounts)":
+                tree["Accounts"] = accounts
+            if competencies and "(error loading competencies)" not in competencies:
+                tree["Competencies"] = competencies
+            return tree
+        def callback(tree):
+            self.target_tree_dict = tree
+            self.tree.delete(*self.tree.get_children())
+            self._populate_tree(self.target_tree_dict, "")
+        self.run_with_modal("Loading..", "Loading Target Gliding App competencies . Please wait...", background_task, callback)
 
-    def _reload_tree(self):
-        self.target_tree_dict = self._load_target_tree()
-        self.tree.delete(*self.tree.get_children())
-        self._populate_tree(self.target_tree_dict, "")
 
     def _populate_tree(self, d: dict | list, parent: str):
         if isinstance(d, dict):
@@ -158,46 +160,59 @@ class App(tk.Tk):
     # ----------- Excel Loading -----------------------------
 
     def _load_excel(self):
-        self.excel_loader.load_excel()
-
-        # Expand base items for left pane
-        base_items = sorted(
-            {row["type"] for row in self.excel_loader.rows}
+        fpath = filedialog.askopenfilename(
+            title="Select Excel file",
+            filetypes=[("Excel files", "*.xlsx *.xls"), ("All files", "*.*")],
         )
-        source_items = []
-        for item in base_items:
-            source_items.append(f"{item} / date from")
-            source_items.append(f"{item} / date to")
-
-        # Fetch account data from server
-        self.account_map = self.api.fetch_accounts_map()
-
-        # Build unique pilot list
-        seen = set()
-        pilots = []
-        for row in self.excel_loader.rows:
-            membership = int(row["membership"])
-            name = row["name"]
-            if membership not in seen:
-                seen.add(membership)
-                pilot_id = self.account_map.get(membership, None)
-                pilots.append((name, membership, pilot_id))
+        if not fpath:
+            return [], []
         
-        self.source_items = source_items
-        self.pilots = pilots
+        def background_task():
+            self.excel_loader.load_excel(fpath)
+
+            # Expand base items for left pane
+            base_items = sorted(
+                {row["type"] for row in self.excel_loader.rows}
+            )
+            source_items = []
+            for item in base_items:
+                source_items.append(f"{item} / date from")
+                source_items.append(f"{item} / date to")
+
+            # Fetch account data from server, to get pilots' ids
+            self.account_map = self.api.fetch_accounts_map()
+
+            # Build unique pilot list
+            seen = set()
+            pilots = []
+            for row in self.excel_loader.rows:
+                membership = int(row["membership"])
+                name = row["name"]
+                if membership not in seen:
+                    seen.add(membership)
+                    pilot_id = self.account_map.get(membership, None)
+                    pilots.append((name, membership, pilot_id))
+            
+            return source_items, pilots
         
-        # Update pilots listbox
-        self.lb_pilots.delete(0, tk.END)
-        for name, membership, pilot_id in self.pilots:
-            self.lb_pilots.insert(tk.END, f"{membership} — {name} - {pilot_id}")
+        def callback(result):
+            self.source_items, self.pilots = result
+            # Update pilots listbox
+            self.lb_pilots.delete(0, tk.END)
+            for name, membership, pilot_id in self.pilots:
+                self.lb_pilots.insert(tk.END, f"{membership} — {name} - {pilot_id}")
 
-        # Update source items listbox
-        self.tree_source.delete(*self.tree_source.get_children())
-        for item in source_items:
-            self.tree_source.insert("", "end", text=item, open=True)
+            # Update source items listbox
+            self.tree_source.delete(*self.tree_source.get_children())
+            for item in self.source_items:
+                self.tree_source.insert("", "end", text=item, open=True)
 
-        # Update upload button state
-        self._update_upload_button_state()            
+            # Update upload button state
+            self._update_upload_button_state()   
+        
+        self.run_with_modal("Loading..", "Loading Excel file. Please wait...", background_task, callback)
+        
+         
 
     # ----------- Mapping Logic -----------------------------
 
@@ -290,12 +305,9 @@ class App(tk.Tk):
         try:
             self.mappings.clear()
             self.mappings = Serializer(fname).deserialize()
-
             self._update_mappings_list()
             self._update_upload_button_state()
             self.unsplit_mappings_to_competencies()
-
-            # Unsplit where necessary
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load mappings:\n{e}")
@@ -347,13 +359,7 @@ class App(tk.Tk):
             self._upload_competencies_data()
             return "Upload completed"
 
-        def done(result):
-            if isinstance(result, Exception):
-                messagebox.showerror("Error", str(result))
-            else:
-                messagebox.showinfo("Success", result)
-
-        self.run_with_modal("Uploading", "Please wait while uploading...", task, done)
+        self.run_with_modal("Uploading..", "Uploading data to Gliding.App. Please wait...", task)
 
     def _upload_competencies_data(self):
         for excel_value_type, full_key in self.mappings:
@@ -444,6 +450,8 @@ class App(tk.Tk):
         else:
             self.btn_upload.config(state=tk.DISABLED)
 
+    # ----------- don't lock the UI when working -----------
+
     def run_with_modal(self, title, message, task, on_complete=None):
         # Create modal dialog
         modal = tk.Toplevel(self)
@@ -451,7 +459,7 @@ class App(tk.Tk):
         modal.transient(self)
         modal.grab_set()  # Make it modal
         modal.resizable(False, False)
-
+        modal.protocol("WM_DELETE_WINDOW", lambda: None)
         label = tk.Label(modal, text=message, padx=20, pady=20)
         label.pack()
 
@@ -468,8 +476,13 @@ class App(tk.Tk):
                 result = e
             def finish():
                 modal.destroy()
-                if on_complete:
-                    on_complete(result)
+                if isinstance(result, Exception):
+                    messagebox.showerror("Error", str(result))
+                else:
+                    if on_complete:
+                        on_complete(result)
+
             self.after(0, finish)
 
         threading.Thread(target=worker, daemon=True).start()
+
