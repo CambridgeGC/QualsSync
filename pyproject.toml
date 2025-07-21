@@ -3,6 +3,7 @@ name = "QualsSync"
 version = "0.1.0"
 package-mode = false
 description = "A Tkinter-based Excel-to-API mapper for pilot qualifications"
+requires-python = ">=3.13,<4"
 authors = [
     { name = "Bruno Tagliapietra", email = "bruno.tagliapietra@gmail.com" }
 ]
@@ -16,3 +17,8 @@ dependencies = [
 [build-system]
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
+[tool.poetry.dependencies]
+python = "3.13.5"
+[tool.poetry.group.dev.dependencies]
+pyinstaller = "^6.14.2"
+
