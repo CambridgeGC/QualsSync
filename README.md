@@ -17,7 +17,7 @@
 
 ## 🖥️ Requirements
 
-- Python 3.10+
+- Python 3.13+
 - [Poetry](https://python-poetry.org/) (for dependency and packaging management)
 - Windows (if building the `.exe`)
 
@@ -81,16 +81,16 @@ Make sure `config.json` exists in the same folder.
 
 ### For Windows users:
 
-Run the batch script:
+Run the powershell script:
 
 ```bash
-build.bat
+build.ps1
 ```
 
 This will:
 - Generate `requirements.txt` using `pipreqs`
 - Build an `.exe` using `pyinstaller`
-- Rename the output to `QualsSync.exe`
+- Rename the output to `QualsSync.exe` (with version number - or DEV_VERSION locally)
 - Copy `config.json.template` as `config.json` into `dist/`
 
 ---
