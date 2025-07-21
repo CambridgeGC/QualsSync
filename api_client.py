@@ -92,6 +92,7 @@ class ApiClient:
         body = {
             "user_id": pilot_id,
             "id": competency_id,
+            "score": "assigned",
             **{k: v for k, v in { # we add date_assigned and date_valid_to only if they are "truthy"
                 "date_assigned": date_assigned,
                 "date_valid_to": date_valid_to
