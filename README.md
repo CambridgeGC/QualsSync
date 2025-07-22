@@ -1,6 +1,7 @@
 # QualsSync
 
-**QualsSync** is a GUI tool for mapping and uploading Excel-based pilot account data to a structured API. It’s designed for gliding clubs or similar organizations that need to manage and sync member data from spreadsheets into an online system.
+**QualsSync** is a GUI tool for mapping and uploading competencies from Aerolog (currently an Excel export) to Gliding App via API. 
+
 
 ---
 
@@ -8,10 +9,9 @@
 
 - Load Tech Quals from Excel files (`.xlsx`), previously output from Aerolog
 - Visual tree-based mapping from spreadsheet columns to API endpoints
-- Filter and validate rows based on membership numbers and types
-- Upload to the "Accounts" API endpoint
 - Save/load mapping profiles
-- Build into a standalone `.exe` for Windows
+- Upload to Gliding App
+
 
 ---
 
@@ -73,6 +73,8 @@ Edit `config.json`:
 python gui.py
 ```
 
+Or use VSCode provided launch.json config to debug.
+
 Make sure `config.json` exists in the same folder.
 
 ---
@@ -94,13 +96,3 @@ This will:
 - Copy `config.json.template` as `config.json` into `dist/`
 
 ---
-
-## 🤝 Contributing
-
-Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
-
----
-
-## 📄 License
-
-MIT License
