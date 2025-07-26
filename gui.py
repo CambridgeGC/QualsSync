@@ -89,6 +89,7 @@ class App(tk.Tk):
         ttk.Button(btnrow, text="Save mappings…", command=self._serialise_json).pack(side="left", padx=4)
         ttk.Button(btnrow, text="Load mappings…", command=self._deserlialise_json).pack(side="left", padx=4)
         ttk.Button(btnrow, text="Delete selected mapping", command=self._delete_selected_mapping).pack(side="left", padx=4)
+        ttk.Button(btnrow, text="TODO: Verify mappings (currently inactive)", command=self._verify_mappings).pack(side="left", padx=4)
 
         ttk.Label(bottom, text="Mappings").grid(row=2, column=0, sticky="w")
 
@@ -276,6 +277,11 @@ class App(tk.Tk):
 
 
     # ----------- Serialisation -----------------------
+
+    def _verify_mappings(self):
+        #TODO
+        messagebox.showinfo("Not implemented", "A mapping file is only valid against the environment it was created from: if you've loaded the mappings, ensure they have been created against the environment you are pointing at in the config.json file. In the future, a verify&correct functionality will be implemented.")
+        return
 
     def _serialise_json(self):
         if not self.mappings:
