@@ -1,0 +1,84 @@
+[
+  {
+    "source": "Medical / date from",
+    "target": {
+      "__type__": "str",
+      "value": "Accounts / medical_valid_from"
+    }
+  },
+  {
+    "source": "Medical / date to",
+    "target": {
+      "__type__": "str",
+      "value": "Accounts / medical_valid_to"
+    }
+  },
+  {
+    "source": "SPL FI(S) Seminar / date from",
+    "target": {
+      "__type__": "str",
+      "value": "Accounts / fis_date_refresher_course"
+    }
+  },
+  {
+    "source": "SPL LM AT",
+    "target": {
+      "__type__": "Competency",
+      "name": "Aerotow launch",
+      "path": "Competencies / SPL Privileges / Launch methods / Aerotow launch",
+      "id": 189
+    }
+  },
+  {
+    "source": "SPL LM W",
+    "target": {
+      "__type__": "Competency",
+      "name": "Winch launch",
+      "path": "Competencies / SPL Privileges / Launch methods / Winch launch",
+      "id": 188
+    }
+  },
+  {
+    "source": "SPL LM S",
+    "target": {
+      "__type__": "Competency",
+      "name": "Self launch",
+      "path": "Competencies / SPL Privileges / Launch methods / Self launch",
+      "id": 190
+    }
+  },
+  {
+    "source": "CGC SELF AUTH",
+    "target": {
+      "__type__": "Competency",
+      "name": "SA XC",
+      "path": "Competencies / Flying Privileges / Auth / SA XC",
+      "id": 380
+    }
+  },
+  {
+    "source": "SPL TMG EXT",
+    "target": {
+      "__type__": "Competency",
+      "name": "TMG Rating",
+      "path": "Competencies / SPL Privileges / Launch methods / TMG Rating",
+      "id": 191
+    }
+  },
+  {
+    "source": "Power - PPL",
+    "target": {
+      "__type__": "Competency",
+      "name": "SEP Rating",
+      "path": "Competencies / SPL Privileges / Launch methods / SEP Rating",
+      "id": 192
+    }
+  },
+  {
+    "source": "SPL FI(S) DoA / date from",
+    "target": {
+      "__type__": "str",
+      "value": "Accounts / fis_date_training_flight"
+    }
+  }
+]

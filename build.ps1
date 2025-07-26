@@ -49,7 +49,8 @@ Run-Exit_On_Error 'poetry run pyinstaller --clean --onefile --name "QualsSync_$T
 "Copying config.json.template to dist/config.json"
 Copy-Item -Path "config.json.template" -Destination "dist\config.json" -Force
 
-Copy-Item -Path "mappings.json" -Destination "dist\default-mappings.json" -Force
+Copy-Item -Path "mappings-dev.json" -Destination "dist\mappings-dev-cgc2.json" -Force
+Copy-Item -Path "mappings-live.json" -Destination "dist\mappings-live-cgc.json" -Force
 
 Write-Host ""
 Write-Host "Build complete. Executable is dist\QualsSync_$Tag.exe"
