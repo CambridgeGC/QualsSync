@@ -17,7 +17,12 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("QualsSync - maps and synchronises technical qualifications - " + config.VERSION)
-        self.minsize(900, 600)
+        self.geometry("1800x900")   
+        self.minsize(1200, 700)     
+
+        self.withdraw()  # Hide the window during setup
+        self.after(0, lambda: self._set_initial_position())  # Defer positioning
+
         self.config_data = config.load_config()
 
         # Data holders
@@ -30,13 +35,14 @@ class App(tk.Tk):
         self.api = ApiClient(self.config_data)
 
         self._build_widgets()
+        
 
     # ----------- Widget Layout -----------------------------
 
     def _build_widgets(self):
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(0, weight=1)
-        self.rowconfigure(1, weight=0)
+        self.rowconfigure(0, weight=1) 
+        self.rowconfigure(1, weight=2) 
 
         paned = ttk.PanedWindow(self, orient="horizontal")
         paned.grid(row=0, column=0, sticky="nsew", pady=(8,4), padx=8)
@@ -80,9 +86,10 @@ class App(tk.Tk):
 
         # Bottom frame with mapping list and buttons
         bottom = ttk.Frame(self, padding=8)
-        bottom.grid(row=1, column=0, sticky="ew")
+        bottom.grid(row=1, column=0, sticky="nsew")
         bottom.columnconfigure(0, weight=1)
-        bottom.rowconfigure(8, weight=1)
+        for r in (3, 5, 8):  # mapping box, pilots box, log box
+            bottom.rowconfigure(r, weight=1)
 
         btnrow = ttk.Frame(bottom)
         btnrow.grid(row=0, column=0, sticky="w", pady=(0,6))
@@ -113,14 +120,27 @@ class App(tk.Tk):
         self.lb_pilots.configure(yscrollcommand=yscroll_pilots.set)
         yscroll_pilots.grid(row=5, column=1, sticky="ns")
 
+        # Upload section 
+        upload_frame = ttk.Frame(bottom)
+        upload_frame.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(0, 4))
+        upload_frame.columnconfigure(0, weight=1)
         # Upload button
         self.btn_upload = ttk.Button(
-            bottom,
+            upload_frame,
             text="Upload Data",
             command=self.upload_data,
-            state=tk.DISABLED  # only enabled when ready
+            state=tk.DISABLED
         )
-        self.btn_upload.grid(row=6, column=0, sticky="ew", pady=(0, 4))
+        self.btn_upload.grid(row=0, column=0, sticky="ew")
+        # "Compare only" checkbox
+        self.check_only_var = tk.BooleanVar()
+        self.chk_check_only = ttk.Checkbutton(
+            upload_frame,
+            text="Compare only (don't update)",
+            variable=self.check_only_var
+        )
+        self.chk_check_only.grid(row=0, column=1, padx=(8, 0), sticky="e")
+      
 
         # Log textbox
         ttk.Label(bottom, text="Log").grid(row=7, column=0, sticky="w")
@@ -133,6 +153,11 @@ class App(tk.Tk):
         self.txt_log.tag_configure("success", foreground="green")
         self.txt_log.tag_configure("warning", foreground="orange")
         self.txt_log.tag_configure("error", foreground="red", background="#ffeeee")
+
+    def _set_initial_position(self):
+        self.update_idletasks()      # Ensure layout is calculated
+        self.geometry("+50+30")      # Move window near top-left
+        self.deiconify()             # Show the window if it was hidden
 
     # ----------- Data Loading -----------------------------
 
@@ -373,6 +398,8 @@ class App(tk.Tk):
     # ----------- Save data into Gliding.App ----------
 
     def upload_data(self):
+        check_only = self.check_only_var.get()
+
         def task():
             successful_updates = 0
             for name, membership, account in self.pilots:
@@ -387,27 +414,33 @@ class App(tk.Tk):
                 if not matching_rows:
                     continue        
 
-                successful_updates += self._upload_account_data(pilot_id, name, matching_rows, account.get("data"))
-                successful_updates += self._upload_competencies_data(pilot_id, name, matching_rows)
-            
-            if (successful_updates > 0):
-                self.log_info(f"updated {successful_updates} competencies")
+                successful_updates += self._upload_account_data(pilot_id, name, matching_rows, account.get("data"), check_only)
+                successful_updates += self._upload_competencies_data(pilot_id, name, matching_rows, check_only)
+
+            if check_only:
+                self.log_info("Check-only mode: no data was changed.")
+            elif successful_updates > 0:
+                self.log_info(f"Updated {successful_updates} competencies")
             else:
-                self.log_info("data was already up to date, nothing changed.")
-            # reload accounts with updated information.
-            self.account_map = self.api.fetch_accounts_map()
-            return f"Upload completed. Updated {successful_updates} competencies"
+                self.log_info("Data was already up to date, nothing changed.")
 
-        self.run_with_modal("Uploading..", "Uploading data to Gliding.App. Please wait...", task)
+            # reload accounts only if we updated something
+            if not check_only:
+                self.account_map = self.api.fetch_accounts_map()
+            return f"{'Compared' if check_only else 'Upload completed'}: {successful_updates} items {'would be' if check_only else 'were'} updated"
 
-    def _upload_competencies_data(self, pilot_id, name, matching_rows):
+        self.run_with_modal("Uploading.." if not check_only else "Comparing..", 
+            "Uploading data to Gliding.App. Please wait..." if not check_only else "Comparing data to Gliding.App. Please wait...", 
+            task)
+
+    def _upload_competencies_data(self, pilot_id, name, matching_rows, check_only=False):
         successful_updates = 0
         pilot_current_competencies = None
         for excel_value_type, full_key in self.mappings:
             if not isinstance(full_key, Competency):
                 continue
 
-            if (pilot_current_competencies == None):
+            if pilot_current_competencies is None:
                 pilot_current_competencies = self.api.get_competencies_by_pilot(pilot_id)
 
             competency = full_key
@@ -415,47 +448,58 @@ class App(tk.Tk):
 
             row = next((r for r in matching_rows if r["type"] == row_type), None)
             if row is None:
-                continue #it means the pilot doesn't have this competency
+                continue
 
             if Competency.should_assign_based_on_dates(row["date from"], row["date to"]):
-                if competency.id not in pilot_current_competencies or pilot_current_competencies[competency.id].has_changed_compared_to_current(row["date from"], row["date to"]):
+                if (competency.id not in pilot_current_competencies or 
+                    pilot_current_competencies[competency.id].has_changed_compared_to_current(row["date from"], row["date to"])):
+                    if check_only:
+                        self.log_info(f"Would assign: {competency.name} to {name}")
+                    else:
+                        try:
+                            self.api.assign_competency(pilot_id, competency.id, row["date from"], row["date to"])
+                            self.log_success(f"Assigned competency to pilot {name}: {competency.name}")
+                            successful_updates += 1
+                        except Exception as e:
+                            self.log_error(f"Failed to assign competency {competency.name} to pilot {name}")
+            else:
+                if check_only:
+                    self.log_info(f"Would revoke: {competency.name} from {name}")
+                else:
                     try:
-                        self.api.assign_competency(pilot_id, competency.id, row["date from"], row["date to"])
-                        self.log_success(f"Assigned competency to pilot {name}: {competency.name}")
+                        self.api.revoke_competency(pilot_id, competency.id)
+                        self.log_warning(f"Revoked competency from pilot {name}: {competency.name}")
                         successful_updates += 1
                     except Exception as e:
-                        self.log_error(f"Failed to assign competency {competency.name} to pilot {name}")
-            else:
-                try:
-                    self.api.revoke_competency(pilot_id, competency.id)
-                    self.log_warning(f"Revoked competency to pilot {name}: {competency.name}")
-                    successful_updates += 1
-                except Exception as e:
-                    self.log_error(f"Failed to revoke competency {competency.name} to pilot {name}")
+                        self.log_error(f"Failed to revoke competency {competency.name} from pilot {name}")
         return successful_updates
 
-    
-    def _upload_account_data(self, pilot_id, name, matching_rows, account_data):
-            updates = {}
-            successful_updates = 0
 
-            for excel_value_type, full_key in self.mappings:
-                if isinstance(full_key, Competency):
+    
+    def _upload_account_data(self, pilot_id, name, matching_rows, account_data, check_only=False):
+        updates = {}
+        successful_updates = 0
+
+        for excel_value_type, full_key in self.mappings:
+            if isinstance(full_key, Competency):
+                continue
+
+            field_name = full_key.split(" / ", 1)[1]
+            row_type = excel_value_type.split(" / ", 1)[0]
+            row_subtype_from_to = excel_value_type.split(" / ", 1)[1]
+
+            for r in matching_rows:
+                if r["type"] != row_type:
                     continue
 
-                field_name = full_key.split(" / ", 1)[1]
-                row_type = excel_value_type.split(" / ", 1)[0]
-                row_subtype_from_to = excel_value_type.split(" / ", 1)[1]
+                new_value = r.get(row_subtype_from_to)
+                if new_value is not None and account_data.get(field_name) != new_value:
+                    updates[field_name] = new_value
 
-                for r in matching_rows:
-                    if r["type"] != row_type:
-                        continue
-
-                    new_value = r.get(row_subtype_from_to)
-                    if new_value is not None and account_data.get(field_name) != new_value:
-                        updates[field_name] = new_value
-
-            if updates:
+        if updates:
+            if check_only:
+                self.log_info(f"Compared Pilot {name} - would update fields: {updates}")
+            else:
                 try:
                     self.api.put_account_data(pilot_id, updates)
                     self.log_success(f"Uploaded account data for pilot {name}: {updates}")
@@ -466,7 +510,8 @@ class App(tk.Tk):
                     self.log_error(f"error: {e}")
                     self.log_error(f"------------------------------")
 
-            return successful_updates
+        return successful_updates
+
         
 
 
