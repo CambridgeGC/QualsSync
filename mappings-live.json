@@ -89,5 +89,77 @@
       "path": "Competencies / SPL Privileges / Instructing privileges / Instructor",
       "id": 195
     }
+  },
+  {
+    "source": "SPL FI(S) a(7) FIC",
+    "target": {
+      "__type__": "Competency",
+      "name": "FIC",
+      "path": "Competencies / SPL Privileges / Instructing privileges / FIC",
+      "id": 402
+    }
+  },
+  {
+    "source": "CGC ROLE LM",
+    "target": {
+      "__type__": "Competency",
+      "name": "Launch marshal",
+      "path": "Competencies / Ground Roles / Competencies / Launch marshal",
+      "id": 371
+    }
+  },
+  {
+    "source": "CGC ROLE LPA",
+    "target": {
+      "__type__": "Competency",
+      "name": "LPA",
+      "path": "Competencies / Ground Roles / Competencies / LPA",
+      "id": 369
+    }
+  },
+  {
+    "source": "CGC ROLE TUG PILOT",
+    "target": {
+      "__type__": "Competency",
+      "name": "Aerotow",
+      "path": "Competencies / SPL Privileges / Tow pilot / Aerotow",
+      "id": 197
+    }
+  },
+  {
+    "source": "CGC ROLE WD",
+    "target": {
+      "__type__": "Competency",
+      "name": "Winchdriver",
+      "path": "Competencies / Ground Roles / Competencies / Winchdriver",
+      "id": 372
+    }
+  },
+  {
+    "source": "CGC PAX",
+    "target": {
+      "__type__": "Competency",
+      "name": "Passenger flying rating",
+      "path": "Competencies / Flying Privileges / Localflights / Passenger flying rating",
+      "id": 376
+    }
+  },
+  {
+    "source": "SPL Aeros A",
+    "target": {
+      "__type__": "Competency",
+      "name": "Advanced Aeros Rating",
+      "path": "Competencies / Flying Privileges / Localflights / Advanced Aeros Rating",
+      "id": 404
+    }
+  },
+  {
+    "source": "SPL FI(S) a(1)(2)(3) RES",
+    "target": {
+      "__type__": "Competency",
+      "name": "Restricted Instructor",
+      "path": "Competencies / SPL Privileges / Instructing privileges / Restricted Instructor",
+      "id": 405
+    }
   }
 ]
