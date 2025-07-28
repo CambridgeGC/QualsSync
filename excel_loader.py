@@ -46,8 +46,8 @@ class ExcelLoader:
                 "membership": membership,
                 "name": name,
                 "type": row_type,
-                "value_from": value_from,
-                "value_to": value_to
+                "date from": value_from,
+                "date to": value_to
             })
 
         return

@@ -1,6 +1,7 @@
 import requests
 from tkinter import messagebox
 from competency import Competency
+from assigned_competency import AssignedCompetency
 
 
 class ApiClient:
@@ -67,7 +68,8 @@ class ApiClient:
             response = requests.get(url, headers=self.headers, timeout=10)
             response.raise_for_status()
             accounts = response.json()
-            return {int(acc['lid_nummer']): acc['id'] for acc in accounts}
+            # Return a map: membership_number (lid_nummer) → full account dict
+            return {int(acc['lid_nummer']): acc for acc in accounts}
         except Exception as e:
             messagebox.showerror("Error", f"Failed to fetch accounts: {e}")
             return {}
@@ -98,14 +100,9 @@ class ApiClient:
                 "date_valid_to": date_valid_to
             }.items() if v}
         }
-        try:
-            response = requests.post(url, json=body, headers=self.headers, timeout=10)
-            response.raise_for_status()
-            return response.json()
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to assign competency: {e}")
-            return 
-        {}
+        response = requests.post(url, json=body, headers=self.headers, timeout=10)
+        response.raise_for_status()
+        return response.json()
     
     def revoke_competency(self, pilot_id, competency_id):
         url = f"{self.base_url}/api/competencies/revoke.json"
@@ -113,11 +110,24 @@ class ApiClient:
             "user_id": pilot_id,
             "id": competency_id
         }
-        try:
-            response = requests.post(url, json=body, headers=self.headers, timeout=10)
-            response.raise_for_status()
-            return response.json()
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to revoke competency: {e}")
-            return 
-        {}
+        response = requests.post(url, json=body, headers=self.headers, timeout=10)
+        response.raise_for_status()
+        return response.json()
+
+    def get_competencies_by_pilot(self, pilot_id):
+        url = f"{self.base_url}/api/competencies/user.json?user_id={pilot_id}"
+        response = requests.get(url, headers=self.headers, timeout=10)
+        response.raise_for_status()
+
+        competencies_by_id = {}
+
+        for item in response.json():
+            comp_id = item["competency_id"]
+            competencies_by_id[comp_id] = AssignedCompetency(
+                comp_id=comp_id,
+                date_assigned=item["date_assigned"],
+                date_valid_to=item.get("date_valid_to"),
+                pilot_id=pilot_id
+            )
+
+        return competencies_by_id

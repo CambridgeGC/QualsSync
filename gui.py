@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 from tkinter import filedialog
+import traceback
 
 import config
 from api_client import ApiClient
@@ -81,7 +82,7 @@ class App(tk.Tk):
         bottom = ttk.Frame(self, padding=8)
         bottom.grid(row=1, column=0, sticky="ew")
         bottom.columnconfigure(0, weight=1)
-        bottom.rowconfigure(3, weight=1)
+        bottom.rowconfigure(8, weight=1)
 
         btnrow = ttk.Frame(bottom)
         btnrow.grid(row=0, column=0, sticky="w", pady=(0,6))
@@ -120,6 +121,18 @@ class App(tk.Tk):
             state=tk.DISABLED  # only enabled when ready
         )
         self.btn_upload.grid(row=6, column=0, sticky="ew", pady=(0, 4))
+
+        # Log textbox
+        ttk.Label(bottom, text="Log").grid(row=7, column=0, sticky="w")
+        self.txt_log = tk.Text(bottom, height=5, state='disabled', wrap="word")
+        self.txt_log.grid(row=8, column=0, columnspan=2, sticky="nsew")
+        yscroll_log = ttk.Scrollbar(bottom, orient="vertical", command=self.txt_log.yview)
+        self.txt_log.configure(yscrollcommand=yscroll_log.set)
+        yscroll_log.grid(row=8, column=2, sticky="ns")
+        self.txt_log.tag_configure("info", foreground="black")
+        self.txt_log.tag_configure("success", foreground="green")
+        self.txt_log.tag_configure("warning", foreground="orange")
+        self.txt_log.tag_configure("error", foreground="red", background="#ffeeee")
 
     # ----------- Data Loading -----------------------------
 
@@ -361,80 +374,100 @@ class App(tk.Tk):
 
     def upload_data(self):
         def task():
-            self._upload_account_data()
-            self._upload_competencies_data()
-            return "Upload completed"
+            successful_updates = 0
+            for name, membership, account in self.pilots:
+                if account is None:
+                    continue    
+                pilot_id = account.get("id")
+
+                matching_rows = [
+                    r for r in self.excel_loader.rows
+                    if str(r["membership"]) == str(membership)
+                ]
+                if not matching_rows:
+                    continue        
+
+                successful_updates += self._upload_account_data(pilot_id, name, matching_rows, account.get("data"))
+                successful_updates += self._upload_competencies_data(pilot_id, name, matching_rows)
+            
+            if (successful_updates > 0):
+                self.log_info(f"updated {successful_updates} competencies")
+            else:
+                self.log_info("data was already up to date, nothing changed.")
+            # reload accounts with updated information.
+            self.account_map = self.api.fetch_accounts_map()
+            return f"Upload completed. Updated {successful_updates} competencies"
 
         self.run_with_modal("Uploading..", "Uploading data to Gliding.App. Please wait...", task)
 
-    def _upload_competencies_data(self):
+    def _upload_competencies_data(self, pilot_id, name, matching_rows):
+        successful_updates = 0
+        pilot_current_competencies = None
         for excel_value_type, full_key in self.mappings:
-            if isinstance(full_key, Competency):
-                competency = full_key
+            if not isinstance(full_key, Competency):
+                continue
+
+            if (pilot_current_competencies == None):
+                pilot_current_competencies = self.api.get_competencies_by_pilot(pilot_id)
+
+            competency = full_key
+            row_type = excel_value_type.split(' / ', 1)[0]
+
+            row = next((r for r in matching_rows if r["type"] == row_type), None)
+            if row is None:
+                continue #it means the pilot doesn't have this competency
+
+            if Competency.should_assign_based_on_dates(row["date from"], row["date to"]):
+                if competency.id not in pilot_current_competencies or pilot_current_competencies[competency.id].has_changed_compared_to_current(row["date from"], row["date to"]):
+                    try:
+                        self.api.assign_competency(pilot_id, competency.id, row["date from"], row["date to"])
+                        self.log_success(f"Assigned competency to pilot {name}: {competency.name}")
+                        successful_updates += 1
+                    except Exception as e:
+                        self.log_error(f"Failed to assign competency {competency.name} to pilot {name}")
             else:
-                continue
-
-            row_type = excel_value_type.split(' / ', 1)[0]
-            
-            for _, membership, pilot_id in self.pilots:
-                if pilot_id is None:
-                    continue
-
-                matching_rows = [
-                    r for r in self.excel_loader.rows
-                    if str(r["membership"]) == str(membership) and r["type"] == row_type
-                ]
-
-                if len(matching_rows) <1:
-                    continue
-
-                if len(matching_rows) > 1:
-                    raise ValueError(f"Expected at most 1 row for membership={membership}, type={row_type}, but found {len(matching_rows)}")
-
-                row = matching_rows[0]
-
-                if Competency.should_assign(row["value_from"], row["value_to"]):
-                    self.api.assign_competency(pilot_id, competency.id, row["value_from"], row["value_to"])
-                else:
+                try:
                     self.api.revoke_competency(pilot_id, competency.id)
+                    self.log_warning(f"Revoked competency to pilot {name}: {competency.name}")
+                    successful_updates += 1
+                except Exception as e:
+                    self.log_error(f"Failed to revoke competency {competency.name} to pilot {name}")
+        return successful_updates
+
     
-    def _upload_account_data(self):
-        updates_by_pilot = {}
+    def _upload_account_data(self, pilot_id, name, matching_rows, account_data):
+            updates = {}
+            successful_updates = 0
 
-        for excel_value_type, full_key in self.mappings:
-            if isinstance(full_key, Competency): #if it's not a competency, it goes in the Account
-                continue
-
-            field_name = full_key.split(" / ", 1)[1]
-            row_type = excel_value_type.split(' / ', 1)[0]
-
-            for _, membership, pilot_id in self.pilots:
-                if pilot_id is None:
+            for excel_value_type, full_key in self.mappings:
+                if isinstance(full_key, Competency):
                     continue
 
-                matching_rows = [
-                    r for r in self.excel_loader.rows
-                    if str(r["membership"]) == str(membership) and r["type"] == row_type
-                ]
-
-                if not matching_rows:
-                    continue
-
-                if pilot_id not in updates_by_pilot:
-                    updates_by_pilot[pilot_id] = {}
+                field_name = full_key.split(" / ", 1)[1]
+                row_type = excel_value_type.split(" / ", 1)[0]
+                row_subtype_from_to = excel_value_type.split(" / ", 1)[1]
 
                 for r in matching_rows:
-                    if r["value_from"]:
-                        updates_by_pilot[pilot_id][field_name] = r["value_from"]
-                    if r["value_to"]:
-                        to_field = field_name.replace("_from", "_to")
-                        updates_by_pilot[pilot_id][to_field] = r["value_to"]
+                    if r["type"] != row_type:
+                        continue
 
-        for pilot_id, data in updates_by_pilot.items():
-            try:
-                self.api.put_account_data(pilot_id, data)
-            except Exception as e:
-                print(f"Failed to upload account data for pilot {pilot_id}: {e}")        
+                    new_value = r.get(row_subtype_from_to)
+                    if new_value is not None and account_data.get(field_name) != new_value:
+                        updates[field_name] = new_value
+
+            if updates:
+                try:
+                    self.api.put_account_data(pilot_id, updates)
+                    self.log_success(f"Uploaded account data for pilot {name}: {updates}")
+                    successful_updates += 1
+                except Exception as e:
+                    self.log_error(f"Failed to upload account data for pilot {name}")
+                    self.log_error(f"attempted updates: {updates}")
+                    self.log_error(f"error: {e}")
+                    self.log_error(f"------------------------------")
+
+            return successful_updates
+        
 
 
     # ----------- Tree double click -----------------------
@@ -455,6 +488,29 @@ class App(tk.Tk):
             self.btn_upload.config(state=tk.NORMAL)
         else:
             self.btn_upload.config(state=tk.DISABLED)
+
+    # ----------- Log Window -----------------
+
+    def log(self, message: str, tag: str = None):
+        self.txt_log.config(state='normal')
+        if tag:
+            self.txt_log.insert(tk.END, message + "\n", tag)
+        else:
+            self.txt_log.insert(tk.END, message + "\n")
+        self.txt_log.see(tk.END)
+        self.txt_log.config(state='disabled') 
+
+    def log_error(self, message):
+        self.log(message, "error") 
+
+    def log_success(self, message):
+        self.log(message, "success") 
+
+    def log_info(self, message):
+        self.log(message, "info") 
+
+    def log_warning(self, message):
+        self.log(message, "warning") 
 
     # ----------- don't lock the UI when working -----------
 
@@ -483,7 +539,10 @@ class App(tk.Tk):
             def finish():
                 modal.destroy()
                 if isinstance(result, Exception):
-                    messagebox.showerror("Error", str(result))
+                    #show the whole call stack
+                    tb_lines = traceback.format_exception(type(result), result, result.__traceback__)
+                    tb_str = ''.join(tb_lines)
+                    messagebox.showerror("Error", tb_str)
                 else:
                     if on_complete:
                         on_complete(result)

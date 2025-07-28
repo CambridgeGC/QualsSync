@@ -22,7 +22,7 @@ class Competency:
         return cls(data["name"], data["path"], data["id"])
   
     @staticmethod
-    def should_assign(value_from: str | None, value_to: str | None) -> bool:
+    def should_assign_based_on_dates(value_from: str | None, value_to: str | None) -> bool:
         today = date.today()
 
         def parse(d):
