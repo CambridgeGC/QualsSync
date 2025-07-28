@@ -80,5 +80,14 @@
       "__type__": "str",
       "value": "Accounts / fis_date_training_flight"
     }
+  },
+  {
+    "source": "SPL FI(S) a(1)(2)(3)",
+    "target": {
+      "__type__": "Competency",
+      "name": "Instructor",
+      "path": "Competencies / SPL Privileges / Instructing privileges / Instructor",
+      "id": 195
+    }
   }
 ]
