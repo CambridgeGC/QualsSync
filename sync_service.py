@@ -1,8 +1,15 @@
+import config
+from datetime import datetime
 from api_client import ApiClient
 from excel_loader import ExcelLoader
 from competency import Competency
 from serializer import Serializer
 from assigned_competency import AssignedCompetency
+from hardcoded_rules import apply_medical_check_rule, should_assign_competency_based_on_dates
+
+class CancelledByUserError(Exception):
+    """Custom exception for when the user cancels an operation."""
+    pass
 
 class SyncService:
     def __init__(self, config):
@@ -15,7 +22,9 @@ class SyncService:
         self.pilots: list[tuple[str, str, str]] = []
         self.account_map: dict[int, dict] = {}
 
-    def load_excel_data(self, fpath):
+    def load_excel_data(self, fpath, cancel_event=None):
+        if cancel_event and cancel_event.is_set():
+            raise CancelledByUserError("Operation cancelled by user.")
         self.excel_loader.load_excel(fpath)
 
         base_items = sorted({row["type"] for row in self.excel_loader.rows})
@@ -24,11 +33,15 @@ class SyncService:
             source_items.append(f"{item} / date from")
             source_items.append(f"{item} / date to")
 
+        if cancel_event and cancel_event.is_set():
+            raise CancelledByUserError("Operation cancelled by user.")
         self.account_map = self.api.fetch_accounts_map()
 
         seen = set()
         pilots = []
-        for row in self.excel_loader.rows:
+        for i, row in enumerate(self.excel_loader.rows):
+            if cancel_event and i % 50 == 0 and cancel_event.is_set():
+                raise CancelledByUserError("Operation cancelled by user.")
             membership = int(row["membership"])
             name = row["name"]
             if membership not in seen:
@@ -40,8 +53,13 @@ class SyncService:
         self.pilots = pilots
         return source_items, self.pilots
 
-    def load_target_tree(self):
+    def load_target_tree(self, cancel_event=None):
+        if cancel_event and cancel_event.is_set():
+            raise CancelledByUserError("Operation cancelled by user.")
         accounts = self.api.load_account_leaves()
+        
+        if cancel_event and cancel_event.is_set():
+            raise CancelledByUserError("Operation cancelled by user.")
         competencies = self.api.load_competencies_subtree()
         tree = {}
         if accounts:
@@ -78,9 +96,12 @@ class SyncService:
     def load_mappings(self, path):
         self.mappings = Serializer.deserialize(path)
         
-    def upload_data(self, check_only=False, log_callback=lambda msg, tag=None: None):
+    def upload_data(self, check_only=False, log_callback=lambda msg, tag=None: None, cancel_event=None):
         successful_updates = 0
         for name, membership, _ in self.pilots:
+            if cancel_event and cancel_event.is_set():
+                raise CancelledByUserError("Operation cancelled by user.")
+
             account = self.account_map.get(int(membership))
             if not account:
                 continue    
@@ -95,8 +116,8 @@ class SyncService:
             if not matching_rows:
                 continue        
 
-            successful_updates += self._upload_account_data(pilot_id, name, matching_rows, account.get("data", {}), check_only, log_callback)
-            successful_updates += self._upload_competencies_data(pilot_id, name, matching_rows, check_only, log_callback)
+            successful_updates += self._upload_account_data(pilot_id, name, matching_rows, account.get("data", {}), check_only, log_callback, cancel_event)
+            successful_updates += self._upload_competencies_data(pilot_id, name, matching_rows, check_only, log_callback, cancel_event)
 
         if check_only:
             log_callback("Check-only mode: no data was changed.", "info")
@@ -111,10 +132,12 @@ class SyncService:
         
         return f"{'Compared' if check_only else 'Upload completed'}: {successful_updates} items {'would be' if check_only else 'were'} updated"
 
-    def _upload_competencies_data(self, pilot_id, name, matching_rows, check_only, log_callback):
+    def _upload_competencies_data(self, pilot_id, name, matching_rows, check_only, log_callback, cancel_event=None):
         successful_updates = 0
         pilot_current_competencies = None
         for excel_value_type, competency in self.mappings:
+            if cancel_event and cancel_event.is_set():
+                raise CancelledByUserError("Operation cancelled by user.")
             if not isinstance(competency, Competency):
                 continue
 
@@ -128,7 +151,7 @@ class SyncService:
 
             date_from, date_to = row["date from"], row["date to"]
 
-            if Competency.should_assign_based_on_dates(date_from, date_to):
+            if should_assign_competency_based_on_dates(date_from, date_to):
                 current_comp = pilot_current_competencies.get(competency.id)
                 has_changed = not current_comp or current_comp.has_changed_compared_to_current(date_from, date_to)
                 
@@ -157,23 +180,36 @@ class SyncService:
                             log_callback(f"Failed to revoke competency {competency.name} from pilot {name}: {e}", "error")
         return successful_updates
 
-    def _upload_account_data(self, pilot_id, name, matching_rows, account_data, check_only, log_callback):
+    def _upload_account_data(self, pilot_id, name, matching_rows, account_data, check_only, log_callback, cancel_event=None):
         updates = {}
+        predefined_values_generators = {
+            "Current DateTime": lambda: datetime.now().astimezone().isoformat(),
+            "App Name (QualsSync)": lambda: config.APP_NAME
+        }
+
         for excel_value_type, full_key in self.mappings:
+            if cancel_event and cancel_event.is_set():
+                raise CancelledByUserError("Operation cancelled by user.")
             if isinstance(full_key, Competency):
                 continue
 
             field_name = full_key.split(" / ", 1)[1]
-            row_type = excel_value_type.split(" / ", 1)[0]
-            row_subtype_from_to = excel_value_type.split(" / ", 1)[1]
-
-            for r in matching_rows:
-                if r["type"] != row_type:
-                    continue
-
-                new_value = r.get(row_subtype_from_to)
-                if new_value is not None and account_data.get(field_name) != new_value:
+            
+            if excel_value_type in predefined_values_generators:
+                new_value = predefined_values_generators[excel_value_type]()
+                if account_data.get(field_name) != new_value:
                     updates[field_name] = new_value
+            else:
+                row_type = excel_value_type.split(" / ", 1)[0]
+                row_subtype_from_to = excel_value_type.split(" / ", 1)[1]
+                for r in matching_rows:
+                    if r["type"] != row_type:
+                        continue
+                    new_value = r.get(row_subtype_from_to)
+                    if new_value is not None and account_data.get(field_name) != new_value:
+                        updates[field_name] = new_value
+
+        apply_medical_check_rule(updates, account_data, name, log_callback)
 
         if updates:
             if check_only:

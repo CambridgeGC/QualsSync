@@ -4,7 +4,7 @@ from tkinter import filedialog
 import traceback
 
 import config
-from sync_service import SyncService
+from sync_service import SyncService, CancelledByUserError
 from competency import Competency
 
 import threading
@@ -57,6 +57,17 @@ class App(tk.Tk):
 
         paned.add(src_frame, weight=1)
 
+        # Predefined values pane
+        predefined_frame = ttk.Frame(paned, padding=6)
+        predefined_frame.columnconfigure(0, weight=1)
+        predefined_frame.rowconfigure(1, weight=1)
+        ttk.Label(predefined_frame, text="Predefined Values").grid(row=0, column=0, sticky="w")
+        self.tree_predefined = ttk.Treeview(predefined_frame, show="tree", selectmode="browse", height=2)
+        self.tree_predefined.grid(row=1, column=0, sticky="nsew")
+        self.tree_predefined.insert("", "end", text="Current DateTime")
+        self.tree_predefined.insert("", "end", text="App Name (QualsSync)")
+        paned.add(predefined_frame, weight=0)
+
         # Target pane
         tgt_frame = ttk.Frame(paned, padding=6)
         tgt_frame.columnconfigure(0, weight=1)
@@ -74,6 +85,10 @@ class App(tk.Tk):
         yscroll_tree.grid(row=1, column=1, sticky="ns")
 
         self.tree.bind("<Double-1>", self._on_tree_double_click)
+
+        self.tree_source.bind("<<TreeviewSelect>>", self._on_source_tree_select)
+        self.tree_predefined.bind("<<TreeviewSelect>>", self._on_source_tree_select)
+
         paned.add(tgt_frame, weight=2)
 
         # Bottom frame with mapping list and buttons
@@ -154,8 +169,8 @@ class App(tk.Tk):
     # ----------- Data Loading -----------------------------
 
     def _load_target_tree(self):
-        def background_task():
-            return self.service.load_target_tree()
+        def background_task(cancel_event):
+            return self.service.load_target_tree(cancel_event)
         
         def callback(tree):
             if tree:
@@ -195,8 +210,8 @@ class App(tk.Tk):
         if not fpath:
             return
 
-        def background_task():
-            return self.service.load_excel_data(fpath)
+        def background_task(cancel_event):
+            return self.service.load_excel_data(fpath, cancel_event)
 
         def callback(result):
             source_items, pilots = result
@@ -221,24 +236,47 @@ class App(tk.Tk):
 
     # ----------- Mapping Logic -----------------------------
 
+    def _on_source_tree_select(self, event):
+        """Ensures only one source tree has a selection at a time."""
+        widget = event.widget
+        if widget == self.tree_source:
+            if self.tree_predefined.selection():
+                self.tree_predefined.selection_set("")  # Deselect all in other tree
+        elif widget == self.tree_predefined:
+            if self.tree_source.selection():
+                self.tree_source.selection_set("")  # Deselect all in other tree
+
     def _map_clicked(self):
         sel_source_id = self.tree_source.selection()
+        sel_predefined_id = self.tree_predefined.selection()
+
         sel_target_id = self.tree.selection()
-        if not sel_source_id or not sel_target_id:
-            messagebox.showinfo("Select items", "Please select an item on both Source and Target trees.")
+        if (not sel_source_id and not sel_predefined_id) or not sel_target_id:
+            messagebox.showinfo("Select items", "Please select an item from one of the source lists and from the target tree.")
             return
 
-        sel_source_id = sel_source_id[0]
         sel_target_id = sel_target_id[0]
 
         # Only allow mapping leaves in target tree
         if self.tree.get_children(sel_target_id):
             messagebox.showwarning("Mapping restriction", "Only leaf nodes in target tree can be mapped.")
             return
+        
+        is_predefined = bool(sel_predefined_id)
+        if is_predefined:
+            source_id = sel_predefined_id[0]
+            source_tree = self.tree_predefined
+        else:
+            source_id = sel_source_id[0]
+            source_tree = self.tree_source
 
-        source_text = self.tree_source.item(sel_source_id)["text"]
+        source_text = source_tree.item(source_id)["text"]
         target_text = self._get_full_tree_path(sel_target_id)
         is_competency = target_text.startswith("Competencies")
+
+        if is_predefined and is_competency:
+            messagebox.showerror("Mapping Error", "Predefined values can only be mapped to Account fields.")
+            return
 
         if is_competency:
             self.unsplit_source_item(source_text)
@@ -357,12 +395,12 @@ class App(tk.Tk):
     def upload_data(self):
         check_only = self.check_only_var.get()
 
-        def task():
+        def task(cancel_event):
             # Clear previous log entries before starting
             self.txt_log.config(state='normal')
             self.txt_log.delete(1.0, tk.END)
             self.txt_log.config(state='disabled')
-            return self.service.upload_data(check_only, self.log)
+            return self.service.upload_data(check_only, self.log, cancel_event)
 
         def on_complete(result):
             # The service returns a summary message
@@ -381,7 +419,8 @@ class App(tk.Tk):
         # Allow mapping on double-click: source must be selected too
         sel_target = self.tree.selection()
         sel_source = self.tree_source.selection()
-        if sel_target and sel_source:
+        sel_predefined = self.tree_predefined.selection()
+        if sel_target and (sel_source or sel_predefined):
             self._map_clicked()
 
     # ----------- Enable update --------------
@@ -420,6 +459,8 @@ class App(tk.Tk):
     # ----------- don't lock the UI when working -----------
 
     def run_with_modal(self, title, message, task, on_complete=None):
+        cancel_event = threading.Event()
+
         # Create modal dialog
         modal = tk.Toplevel(self)
         modal.title(title)
@@ -430,6 +471,14 @@ class App(tk.Tk):
         label = tk.Label(modal, text=message, padx=20, pady=20)
         label.pack()
 
+        def on_cancel():
+            cancel_button.config(state=tk.DISABLED, text="Cancelling...")
+            cancel_event.set()
+
+        cancel_button = ttk.Button(modal, text="Cancel", command=on_cancel)
+        cancel_button.pack(pady=(0, 10))
+
+
         # Center the modal
         self.update_idletasks()
         x = self.winfo_rootx() + (self.winfo_width() // 2) - (modal.winfo_reqwidth() // 2)
@@ -438,18 +487,20 @@ class App(tk.Tk):
 
         def worker():
             try:
-                result = task()
+                result = task(cancel_event)
             except Exception as e:
                 result = e
             def finish():
                 modal.destroy()
-                if isinstance(result, Exception):
+                if isinstance(result, CancelledByUserError):
+                    self.log_info(str(result))
+                elif isinstance(result, Exception):
                     #show the whole call stack
                     tb_lines = traceback.format_exception(type(result), result, result.__traceback__)
                     tb_str = ''.join(tb_lines)
                     messagebox.showerror("Error", tb_str)
                 else:
-                    if on_complete:
+                    if on_complete and not cancel_event.is_set():
                         on_complete(result)
 
             self.after(0, finish)

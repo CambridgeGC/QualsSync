@@ -20,24 +20,3 @@ class Competency:
     def from_dict(cls, data):
         """Recreate a Competency from a dict (e.g., from JSON)."""
         return cls(data["name"], data["path"], data["id"])
-  
-    @staticmethod
-    def should_assign_based_on_dates(value_from: str | None, value_to: str | None) -> bool:
-        today = date.today()
-
-        def parse(d):
-            return datetime.strptime(d, "%Y-%m-%d").date() if d else None
-
-        vf = parse(value_from)
-        vt = parse(value_to)
-
-        if vf is None and vt is None:
-            return True
-
-        if vf and vf > today:
-            return False  # starts in the future
-
-        if vt and vt < today:
-            return False  # already expired
-
-        return True

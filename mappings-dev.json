@@ -89,5 +89,19 @@
       "path": "Competencies / SPL Privileges / Instructing privileges / Instructor",
       "id": 9
     }
+  },
+  {
+    "source": "Current DateTime",
+    "target": {
+      "__type__": "str",
+      "value": "Accounts / medical_checked_at"
+    }
+  },
+  {
+    "source": "App Name (QualsSync)",
+    "target": {
+      "__type__": "str",
+      "value": "Accounts / medical_checked_by"
+    }
   }
 ]

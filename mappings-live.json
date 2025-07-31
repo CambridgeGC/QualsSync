@@ -1,165 +1,179 @@
-[
-  {
-    "source": "Medical / date from",
-    "target": {
-      "__type__": "str",
-      "value": "Accounts / medical_valid_from"
-    }
-  },
-  {
-    "source": "Medical / date to",
-    "target": {
-      "__type__": "str",
-      "value": "Accounts / medical_valid_to"
-    }
-  },
-  {
-    "source": "SPL FI(S) Seminar / date from",
-    "target": {
-      "__type__": "str",
-      "value": "Accounts / fis_date_refresher_course"
-    }
-  },
-  {
-    "source": "SPL LM AT",
-    "target": {
-      "__type__": "Competency",
-      "name": "Aerotow launch",
-      "path": "Competencies / SPL Privileges / Launch methods / Aerotow launch",
-      "id": 189
-    }
-  },
-  {
-    "source": "SPL LM W",
-    "target": {
-      "__type__": "Competency",
-      "name": "Winch launch",
-      "path": "Competencies / SPL Privileges / Launch methods / Winch launch",
-      "id": 188
-    }
-  },
-  {
-    "source": "SPL LM S",
-    "target": {
-      "__type__": "Competency",
-      "name": "Self launch",
-      "path": "Competencies / SPL Privileges / Launch methods / Self launch",
-      "id": 190
-    }
-  },
-  {
-    "source": "CGC SELF AUTH",
-    "target": {
-      "__type__": "Competency",
-      "name": "SA XC",
-      "path": "Competencies / Flying Privileges / Auth / SA XC",
-      "id": 380
-    }
-  },
-  {
-    "source": "SPL TMG EXT",
-    "target": {
-      "__type__": "Competency",
-      "name": "TMG Rating",
-      "path": "Competencies / SPL Privileges / Launch methods / TMG Rating",
-      "id": 191
-    }
-  },
-  {
-    "source": "Power - PPL",
-    "target": {
-      "__type__": "Competency",
-      "name": "SEP Rating",
-      "path": "Competencies / SPL Privileges / Launch methods / SEP Rating",
-      "id": 192
-    }
-  },
-  {
-    "source": "SPL FI(S) DoA / date from",
-    "target": {
-      "__type__": "str",
-      "value": "Accounts / fis_date_training_flight"
-    }
-  },
-  {
-    "source": "SPL FI(S) a(1)(2)(3)",
-    "target": {
-      "__type__": "Competency",
-      "name": "Instructor",
-      "path": "Competencies / SPL Privileges / Instructing privileges / Instructor",
-      "id": 195
-    }
-  },
-  {
-    "source": "SPL FI(S) a(7) FIC",
-    "target": {
-      "__type__": "Competency",
-      "name": "FIC",
-      "path": "Competencies / SPL Privileges / Instructing privileges / FIC",
-      "id": 402
-    }
-  },
-  {
-    "source": "CGC ROLE LM",
-    "target": {
-      "__type__": "Competency",
-      "name": "Launch marshal",
-      "path": "Competencies / Ground Roles / Competencies / Launch marshal",
-      "id": 371
-    }
-  },
-  {
-    "source": "CGC ROLE LPA",
-    "target": {
-      "__type__": "Competency",
-      "name": "LPA",
-      "path": "Competencies / Ground Roles / Competencies / LPA",
-      "id": 369
-    }
-  },
-  {
-    "source": "CGC ROLE TUG PILOT",
-    "target": {
-      "__type__": "Competency",
-      "name": "Aerotow",
-      "path": "Competencies / SPL Privileges / Tow pilot / Aerotow",
-      "id": 197
-    }
-  },
-  {
-    "source": "CGC ROLE WD",
-    "target": {
-      "__type__": "Competency",
-      "name": "Winchdriver",
-      "path": "Competencies / Ground Roles / Competencies / Winchdriver",
-      "id": 372
-    }
-  },
-  {
-    "source": "CGC PAX",
-    "target": {
-      "__type__": "Competency",
-      "name": "Passenger flying rating",
-      "path": "Competencies / Flying Privileges / Localflights / Passenger flying rating",
-      "id": 376
-    }
-  },
-  {
-    "source": "SPL Aeros A",
-    "target": {
-      "__type__": "Competency",
-      "name": "Advanced Aeros Rating",
-      "path": "Competencies / Flying Privileges / Localflights / Advanced Aeros Rating",
-      "id": 404
-    }
-  },
-  {
-    "source": "SPL FI(S) a(1)(2)(3) RES",
-    "target": {
-      "__type__": "Competency",
-      "name": "Restricted Instructor",
-      "path": "Competencies / SPL Privileges / Instructing privileges / Restricted Instructor",
-      "id": 405
-    }
-  }
-]
+[
+  {
+    "source": "Medical / date from",
+    "target": {
+      "__type__": "str",
+      "value": "Accounts / medical_valid_from"
+    }
+  },
+  {
+    "source": "Medical / date to",
+    "target": {
+      "__type__": "str",
+      "value": "Accounts / medical_valid_to"
+    }
+  },
+  {
+    "source": "SPL FI(S) Seminar / date from",
+    "target": {
+      "__type__": "str",
+      "value": "Accounts / fis_date_refresher_course"
+    }
+  },
+  {
+    "source": "SPL LM AT",
+    "target": {
+      "__type__": "Competency",
+      "name": "Aerotow launch",
+      "path": "Competencies / SPL Privileges / Launch methods / Aerotow launch",
+      "id": 189
+    }
+  },
+  {
+    "source": "SPL LM W",
+    "target": {
+      "__type__": "Competency",
+      "name": "Winch launch",
+      "path": "Competencies / SPL Privileges / Launch methods / Winch launch",
+      "id": 188
+    }
+  },
+  {
+    "source": "SPL LM S",
+    "target": {
+      "__type__": "Competency",
+      "name": "Self launch",
+      "path": "Competencies / SPL Privileges / Launch methods / Self launch",
+      "id": 190
+    }
+  },
+  {
+    "source": "CGC SELF AUTH",
+    "target": {
+      "__type__": "Competency",
+      "name": "SA XC",
+      "path": "Competencies / Flying Privileges / Auth / SA XC",
+      "id": 380
+    }
+  },
+  {
+    "source": "SPL TMG EXT",
+    "target": {
+      "__type__": "Competency",
+      "name": "TMG Rating",
+      "path": "Competencies / SPL Privileges / Launch methods / TMG Rating",
+      "id": 191
+    }
+  },
+  {
+    "source": "Power - PPL",
+    "target": {
+      "__type__": "Competency",
+      "name": "SEP Rating",
+      "path": "Competencies / SPL Privileges / Launch methods / SEP Rating",
+      "id": 192
+    }
+  },
+  {
+    "source": "SPL FI(S) DoA / date from",
+    "target": {
+      "__type__": "str",
+      "value": "Accounts / fis_date_training_flight"
+    }
+  },
+  {
+    "source": "SPL FI(S) a(1)(2)(3)",
+    "target": {
+      "__type__": "Competency",
+      "name": "Instructor",
+      "path": "Competencies / SPL Privileges / Instructing privileges / Instructor",
+      "id": 195
+    }
+  },
+  {
+    "source": "SPL FI(S) a(7) FIC",
+    "target": {
+      "__type__": "Competency",
+      "name": "FIC",
+      "path": "Competencies / SPL Privileges / Instructing privileges / FIC",
+      "id": 402
+    }
+  },
+  {
+    "source": "CGC ROLE LM",
+    "target": {
+      "__type__": "Competency",
+      "name": "Launch marshal",
+      "path": "Competencies / Ground Roles / Competencies / Launch marshal",
+      "id": 371
+    }
+  },
+  {
+    "source": "CGC ROLE LPA",
+    "target": {
+      "__type__": "Competency",
+      "name": "LPA",
+      "path": "Competencies / Ground Roles / Competencies / LPA",
+      "id": 369
+    }
+  },
+  {
+    "source": "CGC ROLE TUG PILOT",
+    "target": {
+      "__type__": "Competency",
+      "name": "Aerotow",
+      "path": "Competencies / SPL Privileges / Tow pilot / Aerotow",
+      "id": 197
+    }
+  },
+  {
+    "source": "CGC ROLE WD",
+    "target": {
+      "__type__": "Competency",
+      "name": "Winchdriver",
+      "path": "Competencies / Ground Roles / Competencies / Winchdriver",
+      "id": 372
+    }
+  },
+  {
+    "source": "CGC PAX",
+    "target": {
+      "__type__": "Competency",
+      "name": "Passenger flying rating",
+      "path": "Competencies / Flying Privileges / Localflights / Passenger flying rating",
+      "id": 376
+    }
+  },
+  {
+    "source": "SPL Aeros A",
+    "target": {
+      "__type__": "Competency",
+      "name": "Advanced Aeros Rating",
+      "path": "Competencies / Flying Privileges / Localflights / Advanced Aeros Rating",
+      "id": 404
+    }
+  },
+  {
+    "source": "SPL FI(S) a(1)(2)(3) RES",
+    "target": {
+      "__type__": "Competency",
+      "name": "Restricted Instructor",
+      "path": "Competencies / SPL Privileges / Instructing privileges / Restricted Instructor",
+      "id": 405
+    }
+  },
+  {
+    "source": "Current DateTime",
+    "target": {
+      "__type__": "str",
+      "value": "Accounts / medical_checked_at"
+    }
+  },
+  {
+    "source": "App Name (QualsSync)",
+    "target": {
+      "__type__": "str",
+      "value": "Accounts / medical_checked_by"
+    }
+  }
+]
