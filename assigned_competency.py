@@ -6,7 +6,7 @@ class AssignedCompetency:
         self.pilot_id = pilot_id
 
     def __str__(self):
-        return self.name  # Controls what shows in the UI
+        return f"AssignedCompetency(id={self.id})"  # For debugging, UI formatting should be separate
 
     def __repr__(self):
         return f"AssignedCompetency(id={self.id!r}, date_assigned={self.date_assigned}, date_valid_to={self.date_valid_to}, pilot_id={self.pilot_id})"

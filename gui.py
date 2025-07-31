@@ -4,11 +4,8 @@ from tkinter import filedialog
 import traceback
 
 import config
-from api_client import ApiClient
-from excel_loader import ExcelLoader
-
+from sync_service import SyncService
 from competency import Competency
-from serializer import Serializer
 
 import threading
 
@@ -24,15 +21,10 @@ class App(tk.Tk):
         self.after(0, lambda: self._set_initial_position())  # Defer positioning
 
         self.config_data = config.load_config()
+        self.service = SyncService(self.config_data)
 
         # Data holders
-        self.source_items: list[str] = []
-        self.mappings: list[tuple[str, str | Competency]] = []
-        self.pilots: list[tuple[str, str, str]] = []
         self._competency_map: dict[str, Competency] = {}
-
-        self.excel_loader = ExcelLoader(self.config_data)
-        self.api = ApiClient(self.config_data)
 
         self._build_widgets()
         
@@ -163,20 +155,17 @@ class App(tk.Tk):
 
     def _load_target_tree(self):
         def background_task():
-            # Load accounts and competencies subtree from API
-            accounts = self.api.load_account_leaves()
-            competencies = self.api.load_competencies_subtree()
-            tree = {}
-            if accounts and accounts[0] != "(error loading accounts)":
-                tree["Accounts"] = accounts
-            if competencies and "(error loading competencies)" not in competencies:
-                tree["Competencies"] = competencies
-            return tree
+            return self.service.load_target_tree()
+        
         def callback(tree):
-            self.target_tree_dict = tree
-            self.tree.delete(*self.tree.get_children())
-            self._populate_tree(self.target_tree_dict, "")
-        self.run_with_modal("Loading..", "Loading Target Gliding App competencies . Please wait...", background_task, callback)
+            if tree:
+                self.target_tree_dict = tree
+                self.tree.delete(*self.tree.get_children())
+                self._populate_tree(self.target_tree_dict, "")
+            else:
+                self.log_warning("No target data loaded.")
+
+        self.run_with_modal("Loading...", "Loading Target Gliding App data. Please wait...", background_task, callback)
 
 
     def _populate_tree(self, d: dict | list, parent: str):
@@ -204,51 +193,28 @@ class App(tk.Tk):
             filetypes=[("Excel files", "*.xlsx *.xls"), ("All files", "*.*")],
         )
         if not fpath:
-            return [], []
-        
+            return
+
         def background_task():
-            self.excel_loader.load_excel(fpath)
+            return self.service.load_excel_data(fpath)
 
-            # Expand base items for left pane
-            base_items = sorted(
-                {row["type"] for row in self.excel_loader.rows}
-            )
-            source_items = []
-            for item in base_items:
-                source_items.append(f"{item} / date from")
-                source_items.append(f"{item} / date to")
-
-            # Fetch account data from server, to get pilots' ids
-            self.account_map = self.api.fetch_accounts_map()
-
-            # Build unique pilot list
-            seen = set()
-            pilots = []
-            for row in self.excel_loader.rows:
-                membership = int(row["membership"])
-                name = row["name"]
-                if membership not in seen:
-                    seen.add(membership)
-                    pilot_id = self.account_map.get(membership, None)
-                    pilots.append((name, membership, pilot_id))
-            
-            return source_items, pilots
-        
         def callback(result):
-            self.source_items, self.pilots = result
+            source_items, pilots = result
+            
             # Update pilots listbox
             self.lb_pilots.delete(0, tk.END)
-            for name, membership, pilot_id in self.pilots:
-                self.lb_pilots.insert(tk.END, f"{membership} — {name} - {pilot_id}")
+            for name, membership, pilot_id in pilots:
+                pilot_id_str = pilot_id if pilot_id else "NOT FOUND"
+                self.lb_pilots.insert(tk.END, f"{membership} — {name} - {pilot_id_str}")
 
             # Update source items listbox
             self.tree_source.delete(*self.tree_source.get_children())
-            for item in self.source_items:
+            for item in source_items:
                 self.tree_source.insert("", "end", text=item, open=True)
 
             # Update upload button state
-            self._update_upload_button_state()   
-        
+            self._update_upload_button_state()
+
         self.run_with_modal("Loading..", "Loading Excel file. Please wait...", background_task, callback)
         
          
@@ -256,46 +222,38 @@ class App(tk.Tk):
     # ----------- Mapping Logic -----------------------------
 
     def _map_clicked(self):
-        sel_source = self.tree_source.selection()
-        sel_target = self.tree.selection()
-        if not sel_source or not sel_target:
+        sel_source_id = self.tree_source.selection()
+        sel_target_id = self.tree.selection()
+        if not sel_source_id or not sel_target_id:
             messagebox.showinfo("Select items", "Please select an item on both Source and Target trees.")
             return
 
+        sel_source_id = sel_source_id[0]
+        sel_target_id = sel_target_id[0]
+
         # Only allow mapping leaves in target tree
-        if self.tree.get_children(sel_target[0]):
+        if self.tree.get_children(sel_target_id):
             messagebox.showwarning("Mapping restriction", "Only leaf nodes in target tree can be mapped.")
             return
-        
-        source_text = self.tree_source.item(sel_source[0])["text"]
-        target_iid = sel_target[0]
-        target_text = self._get_full_tree_path(target_iid)
 
-        if target_text.startswith("Competencies"):
+        source_text = self.tree_source.item(sel_source_id)["text"]
+        target_text = self._get_full_tree_path(sel_target_id)
+        is_competency = target_text.startswith("Competencies")
+
+        if is_competency:
             self.unsplit_source_item(source_text)
-            # Truncate date_from / date_to
-            source_text = source_text[:source_text.rfind(" / ")] if " / " in source_text else source_text
 
-        # Try to get a Competency object from the iid
-        target_competency = self._competency_map.get(target_iid)
-        if target_competency:
-            target = target_competency
-        else:
-            target = target_text  # fallback if it's not a competency
-
-        self.mappings.append((source_text, target))
+        target_item = self._competency_map.get(sel_target_id) or target_text
+        
+        self.service.add_mapping(source_text, target_item, is_competency)
         self._update_mappings_list()
-        # Update upload button state
-        self._update_upload_button_state()          
+        self._update_upload_button_state()
 
     def _update_mappings_list(self):
         self.lb_mappings.delete(0, tk.END)
-        for source, target in self.mappings:
-            if isinstance(target, Competency):
-                target_label = target.path
-            else:
-                target_label = target
-            self.lb_mappings.insert(tk.END, f"{source} → {target_label}")
+        display_items = self.service.get_mappings_for_display()
+        for item in display_items:
+            self.lb_mappings.insert(tk.END, item)
 
 
     def _delete_selected_mapping(self):
@@ -303,7 +261,7 @@ class App(tk.Tk):
         if not sel:
             return
         index = sel[0]
-        del self.mappings[index]
+        self.service.delete_mapping(index)
         self._update_mappings_list()
 
     def _get_full_tree_path(self, item_id):
@@ -322,7 +280,7 @@ class App(tk.Tk):
         return
 
     def _serialise_json(self):
-        if not self.mappings:
+        if not self.service.mappings:
             messagebox.showinfo("No mappings", "There are no mappings to save.")
             return
         fname = filedialog.asksaveasfilename(
@@ -334,7 +292,7 @@ class App(tk.Tk):
             return
 
         try:
-            Serializer(fname).serialize(self.mappings)
+            self.service.save_mappings(fname)
             messagebox.showinfo("Saved", f"Mappings saved to {fname}")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save:\n{e}")
@@ -347,8 +305,7 @@ class App(tk.Tk):
         if not fname:
             return
         try:
-            self.mappings.clear()
-            self.mappings = Serializer(fname).deserialize()
+            self.service.load_mappings(fname)
             self._update_mappings_list()
             self._update_upload_button_state()
             self.unsplit_mappings_to_competencies()
@@ -357,9 +314,9 @@ class App(tk.Tk):
             messagebox.showerror("Error", f"Failed to load mappings:\n{e}")
 
     def unsplit_mappings_to_competencies(self):
-        for source_label, target in self.mappings:
+        for source_label, target in self.service.mappings:
             if isinstance(target, Competency):
-                self.unsplit_source_item(source_label)        
+                self.unsplit_source_item(source_label)
 
     def unsplit_source_item(self, base_item):
         if base_item.endswith(" / date from"):
@@ -401,116 +358,19 @@ class App(tk.Tk):
         check_only = self.check_only_var.get()
 
         def task():
-            successful_updates = 0
-            for name, membership, account in self.pilots:
-                if account is None:
-                    continue    
-                pilot_id = account.get("id")
+            # Clear previous log entries before starting
+            self.txt_log.config(state='normal')
+            self.txt_log.delete(1.0, tk.END)
+            self.txt_log.config(state='disabled')
+            return self.service.upload_data(check_only, self.log)
 
-                matching_rows = [
-                    r for r in self.excel_loader.rows
-                    if str(r["membership"]) == str(membership)
-                ]
-                if not matching_rows:
-                    continue        
+        def on_complete(result):
+            # The service returns a summary message
+            self.log_info(f"\n----- {result} -----")
 
-                successful_updates += self._upload_account_data(pilot_id, name, matching_rows, account.get("data"), check_only)
-                successful_updates += self._upload_competencies_data(pilot_id, name, matching_rows, check_only)
-
-            if check_only:
-                self.log_info("Check-only mode: no data was changed.")
-            elif successful_updates > 0:
-                self.log_info(f"Updated {successful_updates} competencies")
-            else:
-                self.log_info("Data was already up to date, nothing changed.")
-
-            # reload accounts only if we updated something
-            if not check_only:
-                self.account_map = self.api.fetch_accounts_map()
-            return f"{'Compared' if check_only else 'Upload completed'}: {successful_updates} items {'would be' if check_only else 'were'} updated"
-
-        self.run_with_modal("Uploading.." if not check_only else "Comparing..", 
-            "Uploading data to Gliding.App. Please wait..." if not check_only else "Comparing data to Gliding.App. Please wait...", 
-            task)
-
-    def _upload_competencies_data(self, pilot_id, name, matching_rows, check_only=False):
-        successful_updates = 0
-        pilot_current_competencies = None
-        for excel_value_type, full_key in self.mappings:
-            if not isinstance(full_key, Competency):
-                continue
-
-            if pilot_current_competencies is None:
-                pilot_current_competencies = self.api.get_competencies_by_pilot(pilot_id)
-
-            competency = full_key
-            row_type = excel_value_type.split(' / ', 1)[0]
-
-            row = next((r for r in matching_rows if r["type"] == row_type), None)
-            if row is None:
-                continue
-
-            if Competency.should_assign_based_on_dates(row["date from"], row["date to"]):
-                if (competency.id not in pilot_current_competencies or 
-                    pilot_current_competencies[competency.id].has_changed_compared_to_current(row["date from"], row["date to"])):
-                    if check_only:
-                        self.log_info(f"Would assign: {competency.name} to {name}")
-                    else:
-                        try:
-                            self.api.assign_competency(pilot_id, competency.id, row["date from"], row["date to"])
-                            self.log_success(f"Assigned competency to pilot {name}: {competency.name}")
-                            successful_updates += 1
-                        except Exception as e:
-                            self.log_error(f"Failed to assign competency {competency.name} to pilot {name}")
-            else:
-                if check_only:
-                    self.log_info(f"Would revoke: {competency.name} from {name}")
-                else:
-                    try:
-                        self.api.revoke_competency(pilot_id, competency.id)
-                        self.log_warning(f"Revoked competency from pilot {name}: {competency.name}")
-                        successful_updates += 1
-                    except Exception as e:
-                        self.log_error(f"Failed to revoke competency {competency.name} from pilot {name}")
-        return successful_updates
-
-
-    
-    def _upload_account_data(self, pilot_id, name, matching_rows, account_data, check_only=False):
-        updates = {}
-        successful_updates = 0
-
-        for excel_value_type, full_key in self.mappings:
-            if isinstance(full_key, Competency):
-                continue
-
-            field_name = full_key.split(" / ", 1)[1]
-            row_type = excel_value_type.split(" / ", 1)[0]
-            row_subtype_from_to = excel_value_type.split(" / ", 1)[1]
-
-            for r in matching_rows:
-                if r["type"] != row_type:
-                    continue
-
-                new_value = r.get(row_subtype_from_to)
-                if new_value is not None and account_data.get(field_name) != new_value:
-                    updates[field_name] = new_value
-
-        if updates:
-            if check_only:
-                self.log_info(f"Compared Pilot {name} - would update fields: {updates}")
-            else:
-                try:
-                    self.api.put_account_data(pilot_id, updates)
-                    self.log_success(f"Uploaded account data for pilot {name}: {updates}")
-                    successful_updates += 1
-                except Exception as e:
-                    self.log_error(f"Failed to upload account data for pilot {name}")
-                    self.log_error(f"attempted updates: {updates}")
-                    self.log_error(f"error: {e}")
-                    self.log_error(f"------------------------------")
-
-        return successful_updates
+        self.run_with_modal("Uploading.." if not check_only else "Comparing..",
+            "Uploading data to Gliding.App. Please wait..." if not check_only else "Comparing data with Gliding.App. Please wait...",
+            task, on_complete)
 
         
 
@@ -527,8 +387,8 @@ class App(tk.Tk):
     # ----------- Enable update --------------
 
     def _update_upload_button_state(self):
-        has_excel = self.excel_loader.has_excel()
-        has_any_mappings = bool(self.mappings)
+        has_excel = self.service.excel_loader.has_excel()
+        has_any_mappings = bool(self.service.mappings)
         if has_excel and has_any_mappings:
             self.btn_upload.config(state=tk.NORMAL)
         else:

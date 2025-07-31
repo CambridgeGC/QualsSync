@@ -3,10 +3,8 @@ from competency import Competency
 import json
 
 class Serializer:
-    def __init__(self, path):
-        self.path = path
-
-    def serialize(self, mappings):
+    @staticmethod
+    def serialize(mappings, path):
         serializable = []
         for source, target in mappings:
             if isinstance(target, Competency):
@@ -14,12 +12,13 @@ class Serializer:
             else:
                 target_data = {"__type__": "str", "value": target}
             serializable.append({"source": source, "target": target_data})
-            with open(self.path, "w", encoding="utf-8") as f:
-                json.dump(serializable, f, indent=2)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(serializable, f, indent=2)
 
-    def deserialize(self):
+    @staticmethod
+    def deserialize(path):
         mappings = []
-        with open(self.path, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8") as f:
             loaded = json.load(f)
             for pair in loaded:
                 source = pair["source"]

@@ -1,5 +1,4 @@
 import requests
-from tkinter import messagebox
 from competency import Competency
 from assigned_competency import AssignedCompetency
 
@@ -22,8 +21,7 @@ class ApiClient:
                 raise ValueError("'data' field not found in first element")
             return sorted(acct_data.keys())
         except Exception as e:
-            messagebox.showerror("API error", f"Could not load accounts:\n{e}")
-            return ["(error loading accounts)"]
+            raise ConnectionError(f"Could not load accounts: {e}") from e
 
     def load_competencies_subtree(self):
         url = f"{self.base_url}/api/competencies.json"
@@ -41,8 +39,8 @@ class ApiClient:
                 for cat in cur.get("categories", []):
                     comps = [
                         Competency(
-                            comp["name"], 
-                            " / ".join(["Competencies", cur.get("name"), cat.get("name"), comp["name"]]) , 
+                            comp["name"],
+                            " / ".join(["Competencies", cur.get("name"), cat.get("name"), comp["name"]]),
                             comp.get("id", None)
                             )
                         for comp in cat.get("competencies", [])
@@ -55,11 +53,10 @@ class ApiClient:
                     name = cur.get("name")
                     tree[name] = cat_branch
 
-            return tree if tree else {"(no eligible data)": []}
+            return tree
 
         except Exception as e:
-            messagebox.showerror("API error", f"Could not load competencies:\n{e}")
-            return {"(error loading competencies)": []}
+            raise ConnectionError(f"Could not load competencies: {e}") from e
 
 
     def fetch_accounts_map(self):
@@ -71,8 +68,7 @@ class ApiClient:
             # Return a map: membership_number (lid_nummer) → full account dict
             return {int(acc['lid_nummer']): acc for acc in accounts}
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to fetch accounts: {e}")
-            return {}
+            raise ConnectionError(f"Failed to fetch accounts: {e}") from e
 
     def put_account_data(self, pilot_id, data_fields):
         url = f"{self.base_url}/api/accounts.json"
@@ -80,14 +76,9 @@ class ApiClient:
             "id": pilot_id,
             "data": data_fields
         }
-        try:
-            response = requests.put(url, json=body, headers=self.headers, timeout=10)
-            response.raise_for_status()
-            return response.json()
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to update accounts: {e}")
-            return 
-        {}
+        response = requests.put(url, json=body, headers=self.headers, timeout=10)
+        response.raise_for_status()
+        return response.json()
     
     def assign_competency(self, pilot_id, competency_id, date_assigned, date_valid_to):
         url = f"{self.base_url}/api/competencies/assign.json"

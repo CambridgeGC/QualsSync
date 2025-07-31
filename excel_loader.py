@@ -1,4 +1,3 @@
-from tkinter import filedialog, messagebox
 try:
     import pandas as pd
 except ModuleNotFoundError:
@@ -21,15 +20,16 @@ class ExcelLoader:
         Returns (expanded source_items, pilots list).
         """
 
+        if not pd:
+            raise ImportError("The 'pandas' and 'openpyxl' libraries are required to read Excel files.")
+
         try:
             df = pd.read_excel(fpath, sheet_name=0, engine="openpyxl", header=4)
         except Exception as e:
-            messagebox.showerror("Error reading Excel", str(e))
-            return [], []
+            raise ValueError(f"Error reading Excel file: {e}") from e
 
         if df.shape[1] < 3:
-            messagebox.showerror("Error", "First sheet has fewer than 3 columns.")
-            return [], []
+            raise ValueError("Excel file error: First sheet has fewer than 3 columns.")
 
         membership_col = 'ACCOUNT'
         name_col = 'NAME'
@@ -49,8 +49,6 @@ class ExcelLoader:
                 "date from": value_from,
                 "date to": value_to
             })
-
-        return
     
     @staticmethod
     def _parse_excel_date(value):
