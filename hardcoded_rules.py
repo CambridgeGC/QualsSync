@@ -3,7 +3,8 @@ from datetime import datetime, date
 def apply_medical_check_rule(updates, account_data, name, log_callback):
     """
     Applies the business rule that 'medical_checked_at' and 'medical_checked_by'
-    fields should only be updated if the pilot's medical qualification is current.
+    fields should only be updated if the pilot's medical qualification is current
+    and its validity dates are also being updated.
     This modifies the 'updates' dictionary in place.
     """
     is_checking_medical = 'medical_checked_at' in updates or 'medical_checked_by' in updates
@@ -26,11 +27,22 @@ def apply_medical_check_rule(updates, account_data, name, log_callback):
             return False  # Expired
         return True
 
+    is_validity_dates_updating = 'medical_valid_from' in updates or 'medical_valid_to' in updates
+
     # Use the new validity dates if they're part of this update, otherwise use existing data.
     effective_valid_from = updates.get('medical_valid_from', account_data.get('medical_valid_from'))
     effective_valid_to = updates.get('medical_valid_to', account_data.get('medical_valid_to'))
 
-    if not is_medical_current(effective_valid_from, effective_valid_to):
+    medical_is_current = is_medical_current(effective_valid_from, effective_valid_to)
+
+    if not is_validity_dates_updating or not medical_is_current:
+        reasons = []
+        if not is_validity_dates_updating:
+            reasons.append("medical validity dates are not changing")
+        if not medical_is_current:
+            reasons.append("medical is not current")
+        reason_str = " and ".join(reasons)
+
         skipped_fields = []
         if 'medical_checked_at' in updates:
             updates.pop('medical_checked_at')
@@ -40,7 +52,7 @@ def apply_medical_check_rule(updates, account_data, name, log_callback):
             skipped_fields.append("'medical_checked_by'")
         
         if skipped_fields:
-            log_callback(f"Skipping update of {', '.join(skipped_fields)} for {name}: medical is not current.", "warning")
+            log_callback(f"Skipping update of {', '.join(skipped_fields)} for {name}: {reason_str}.", "warning")
 
 def should_assign_competency_based_on_dates(value_from: str | None, value_to: str | None) -> bool:
     """
